@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+
+set -e
+
+NOTEBOX_DIR="$HOME/Sync/notes"
+
+mkdir -p "$NOTEBOX_DIR"
+
+lid=`find "$NOTEBOX_DIR" -type f -name '*.md' | xargs basename | awk -F- '{print $2}' | sed 's/\.md//' | sort -r -n | head -n1`
+
+# echo "LID: $lid";
+
+if [ -z "$lid" ]; then
+  (( lid = 0 ))
+else
+  (( ++lid ))
+fi
+
+dt=`date "+00%Y%m%d"`
+docdate=`date -u`
+
+nt="$NOTEBOX_DIR/$dt-$lid.md";
+echo DATE: $docdate > "$nt"
+echo 'TITLE:' >> "$nt"
+echo 'TAGS:'  >> "$nt"
+echo '---'  >> "$nt"
+echo "$nt"

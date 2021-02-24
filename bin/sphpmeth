@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+
+name="$1"||'a_method'
+
+cat <<EOF
+	/**
+	 * ${name}: A method that does things.
+	 *
+	 * @return mixed
+	 **/
+	private function ${name}() {
+		// body
+	}
+EOF
+

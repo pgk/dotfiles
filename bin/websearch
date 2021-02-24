@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+
+surf "https://duckduckgo.com/html?q=$1"

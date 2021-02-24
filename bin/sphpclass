@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+
+name="$1"||'a_function'
+
+cat <<EOF
+/**
+ * ${name}: A class that does things.
+ *
+ * @package Package
+ **/
+class ${name} {
+	// body
+}
+EOF
+
