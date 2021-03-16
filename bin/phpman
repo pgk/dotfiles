@@ -1,0 +1,4 @@
+#!/bin/sh
+PHP_MAN_PAGE_LOCATION="${PHP_MAN_PAGE_LOCATION:-/usr/local/share/pear/doc/pman/}"
+MAN=`which man`
+PAGER='' MANPAGER='' $MAN -M "$PHP_MAN_PAGE_LOCATION" $*
