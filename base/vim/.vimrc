@@ -278,6 +278,7 @@ inoremap <C-U> <C-G>u<C-U>
 nnoremap ς w
 nnoremap τ t
 nnoremap υ y
+nnoremap υυ yy
 nnoremap Υ Υ
 nnoremap Θ U
 nnoremap θ u
@@ -292,6 +293,7 @@ nnoremap α a
 nnoremap Α A
 nnoremap σ s
 nnoremap δ d
+nnoremap δδ dd
 nnoremap φ f
 nnoremap γ g
 nnoremap η h
