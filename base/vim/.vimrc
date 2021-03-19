@@ -56,9 +56,6 @@ Plug 'glench/vim-jinja2-syntax'
 Plug 'cespare/vim-toml'
 Plug 'tomasr/molokai'
 
-" Plug 'vim-airline/vim-airline'
-" Plug 'vim-airline/vim-airline-themes'
-
 if has('nvim') || version >= 801
   Plug 'supercollider/scvim'
   Plug 'neomake/neomake'
@@ -317,10 +314,8 @@ set nrformats-=octal
 
 command! Ctgen !ctags -R --exclude=.git --exclude=node_modules --exclude=vendor --exclude=logs .
 
-" Convenience vim editing commands
 command! Rlvimrc :source ~/.vimrc
 command! Evimrc :e ~/.vimrc
-" command! NoteAdd :e ~/Sync/docs/notes.md
 
 function! EditStandups()
   :e ~/Sync/docs/standups.md
@@ -341,9 +336,6 @@ else
   nnoremap <Leader>a :grep<cr>
   nnoremap <silent><Leader>aa :grep <cword> *<CR>
 endif
-
-" nnoremap <silent> <leader>aa :grep <cword> *<CR>
-" nnoremap <silent><leader>aa :Rg <C-R>expand("<cword>")<CR>
 
 nnoremap <silent> <leader>ff :FZF<cr>
 nnoremap <silent> <leader>fl :Lines<cr>
