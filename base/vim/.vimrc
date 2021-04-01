@@ -56,13 +56,17 @@ Plug 'glench/vim-jinja2-syntax'
 Plug 'cespare/vim-toml'
 Plug 'tomasr/molokai'
 
+Plug 'ludovicchabant/vim-gutentags'
+
 if has('nvim') || version >= 801
   Plug 'supercollider/scvim'
   Plug 'neomake/neomake'
   if executable('go')
     Plug 'fatih/vim-go', { 'do': ':GoUpdateBinaries' }
   endif
+  Plug 'w0rp/ale'
 endif
+
 
 if version >= 704
   Plug 'junegunn/fzf', { 'dir': '~/.fzf', 'do': './install --bin' }
@@ -102,6 +106,14 @@ let g:netrw_winsize = 25
 let g:netrw_liststyle = 3
 let g:netrw_browse_split = 4
 let g:netrw_altv = 1
+
+" Gutentag setup
+let g:gutentags_cache_dir = '~/.vim/gutentags'
+let gutentags_ctags_exclude = ['*.css', '*.html', '*.js', '*.json', '*.xml',
+                              \ '*.phar', '*.ini', '*.rst', '*.md',
+                              \ '*vendor/*/test*', '*vendor/*/Test*',
+                              \ '*vendor/*/fixture*', '*vendor/*/Fixture*',
+                              \ '*var/cache*', '*var/log*']
 
 " Status line setup
 function! GitBranch()
@@ -168,7 +180,25 @@ endfunction
 imap <c-'> <CMD>:call CompleteInf()<CR>
 
 set path+=** " Provides tab-completion for all file-related tasks
-set omnifunc=syntaxcomplete#Complete
+
+" Set completion
+if has('nvim') || version >= 801
+  " Ale setup
+  let g:ale_completion_enabled = 1
+  " Fine-tune when linters run.
+  let g:ale_lint_on_text_changed = 'never'
+  let g:ale_lint_on_insert_leave = 1
+  " don't want linters to run on opening a file
+  let g:ale_lint_on_enter = 0
+  set omnifunc=ale#completion#OmniFunc
+
+  let g:ale_linters = {
+  \   'php': ['php'],
+  \}
+else
+  set omnifunc=syntaxcomplete#Complete
+endif
+
 
 " allow backspacing over everything in insert mode
 set backspace=indent,eol,start
@@ -434,7 +464,7 @@ if has("gui_running")
     elseif has("gui_win32")
       :set guifont=Luxi_Mono:h14:cANSI
     elseif has("gui_macvim")
-      :set guifont=Inconsolata:h16,Menlo:h14,Consolas:h14,DejaVu\ Sans\ Mono:h14,monospace:h14
+      :set guifont=Inconsolata:h18,Menlo:h16,Consolas:h16,DejaVu\ Sans\ Mono:h16,monospace:h16
     endif
 endif
 
