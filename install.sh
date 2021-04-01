@@ -70,6 +70,7 @@ source "$HOME/.dotfileprefs"
 bash "$DOTFILE_FOLDER/base/bash/install.sh"
 bash "$DOTFILE_FOLDER/base/git/install.sh"
 bash "$DOTFILE_FOLDER/base/tmux/install.sh"
+bash "$DOTFILE_FOLDER/base/ctags/install.sh"
 bash "$DOTFILE_FOLDER/base/vim/install.sh"
 bash "$DOTFILE_FOLDER/base/mpd/install.sh"
 
