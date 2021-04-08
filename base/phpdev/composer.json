@@ -1,0 +1,6 @@
+{
+    "require": {
+        "squizlabs/php_codesniffer": "*",
+        "phpstan/phpstan": "^0.12.83"
+    }
+}
