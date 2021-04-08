@@ -1,6 +1,9 @@
 plugins/*
 !plugins/.gitkeep
 
+base/phpdev/vendor
+base/phpdev/wpcs
+
 .secrets
 tags
 bin/bp.conf
