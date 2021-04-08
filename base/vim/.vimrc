@@ -52,19 +52,28 @@ Plug 'tpope/vim-commentary'
 Plug 'editorconfig/editorconfig-vim'
 Plug 'scrooloose/nerdtree'
 Plug 'leafgarland/typescript-vim'
+Plug 'stanangeloff/php.vim'
+Plug 'rust-lang/rust.vim'
 Plug 'glench/vim-jinja2-syntax'
 Plug 'cespare/vim-toml'
 Plug 'tomasr/molokai'
 
+Plug 'gioele/vim-autoswap'
+
 Plug 'ludovicchabant/vim-gutentags'
+
+Plug 'SirVer/ultisnips'
+Plug 'honza/vim-snippets'
 
 if has('nvim') || version >= 801
   Plug 'supercollider/scvim'
   Plug 'neomake/neomake'
+  Plug 'preservim/tagbar'
+  Plug 'w0rp/ale'
+
   if executable('go')
     Plug 'fatih/vim-go', { 'do': ':GoUpdateBinaries' }
   endif
-  Plug 'w0rp/ale'
 endif
 
 
@@ -138,6 +147,7 @@ set statusline+=\ %{&fileencoding?&fileencoding:&encoding}
 set statusline+=\[%{&fileformat}\]
 set statusline+=\ %p%%
 set statusline+=\ %l:%c
+set statusline+=%{gutentags#statusline()}
 set statusline+=\ 
 " End Statusline
 
@@ -192,9 +202,12 @@ if has('nvim') || version >= 801
   let g:ale_lint_on_enter = 0
   set omnifunc=ale#completion#OmniFunc
 
-  let g:ale_linters = {
-  \   'php': ['php'],
-  \}
+
+  " GoTo code navigation.
+  " nnoremap <Leader>nt :NERDTreeToggle<CR>
+  nnoremap <silent> gd <Plug>:ALEGoToDefinition<CR>
+  nnoremap <silent> gy <Plug>:ALEGoToTypeDefinition<CR>
+  nnoremap <silent> gr <Plug>:ALEFindReferences<CR>
 else
   set omnifunc=syntaxcomplete#Complete
 endif
@@ -259,8 +272,9 @@ let g:mapleader = " "
 " Space should really do nothing.
 nnoremap <Space> <Nop>
 
-" NERDTree
+" NERDTree and tagbar toggles.
 nnoremap <Leader>nt :NERDTreeToggle<CR>
+nnoremap <Leader>tt :TagbarToggle<CR>
 
 " Copy to and paste from system clipboard
 vnoremap <silent> <leader>y "+y
