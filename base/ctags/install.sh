@@ -6,5 +6,6 @@ set -e
 full_path=$(realpath "$0")
 PLUGIN_PATH=$(dirname "$full_path")
 
-ln -sf "$PLUGIN_PATH/global.ctags" "$HOME/.ctags"
+mkdir -p "$HOME/.config/"
+ln -sf "$PLUGIN_PATH/ctags" "$HOME/.config/ctags"
 
