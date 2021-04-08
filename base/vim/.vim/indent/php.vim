@@ -13,6 +13,7 @@ runtime! indent/html.vim
 unlet b:did_indent
 runtime! indent/php.vim
 unlet s:doing_indent_inits
+
 function! GetPhpHtmlIndent(lnum)
   if exists('*HtmlIndent')
     let html_ind = HtmlIndent()
