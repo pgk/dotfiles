@@ -189,3 +189,8 @@ if [ -f ~/dotfiles/base/bash/.profile ]; then
     . ~/dotfiles/base/bash/.profile
 fi
 
+
+if [ -d "$HOME/dotfiles/base/phpdev/bin" ]; then
+    # phpdev preecedence over system bin.
+    export PATH="$HOME/dotfiles/base/phpdev/bin:$PATH"
+fi
