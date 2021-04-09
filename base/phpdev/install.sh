@@ -32,6 +32,15 @@ else
   echo "wpcs is installed"
 fi
 
+phpactor_path="$PLUGIN_PATH/phpactor"
+if [ ! -d "$phpactor_path" ]
+then
+  cd "$PLUGIN_PATH" && git clone -b master 'https://github.com/phpactor/phpactor.git' "$phpactor_path"
+  cd "$DOTFILE_FOLDER"
+else
+  echo "phpactor is installed"
+fi
+
 vendor_bin="$PLUGIN_PATH/vendor/bin"
 # phpcs setup
 php "$vendor_bin/phpcs" --config-set installed_paths "$wpcs_path"
