@@ -57,6 +57,8 @@ Plug 'rust-lang/rust.vim'
 Plug 'glench/vim-jinja2-syntax'
 Plug 'cespare/vim-toml'
 Plug 'tomasr/molokai'
+Plug 'vim-airline/vim-airline'
+Plug 'vim-airline/vim-airline-themes'
 
 Plug 'gioele/vim-autoswap'
 
@@ -118,38 +120,48 @@ let g:netrw_altv = 1
 
 " Gutentag setup
 let g:gutentags_cache_dir = '~/.vim/gutentags'
-let gutentags_ctags_exclude = ['*.css', '*.html', '*.js', '*.json', '*.xml',
-                              \ '*.phar', '*.ini', '*.rst', '*.md',
+let g:gutentags_ctags_exclude = ['*.json', '*.xml', '*.yml', '*.min.js', '*.css', '*.min.css', 'node_modules',
+                              \ '*.phar', '*.ini', '*.rst', '*.md', '*dist/*',
                               \ '*vendor/*/test*', '*vendor/*/Test*',
                               \ '*vendor/*/fixture*', '*vendor/*/Fixture*',
+                              \ '.git', '.hg',
                               \ '*var/cache*', '*var/log*']
 
-" Status line setup
-function! GitBranch()
-    return system("command -v git > /dev/null 2>&1 && git rev-parse --abbrev-ref HEAD 2>/dev/null | tr -d '\n'")
-endfunction
 
-function! StatuslineGit()
+" Statusline setup. If airline is around we will use that, otherwise fallback
+" to something sane.
+if (exists('g:loaded_airline') && g:loaded_airline)
+  let g:airline_theme='molokai'
+  let g:airline#extensions#tagbar#enabled = 0
+else
+  " Status line setup
+  function! GitBranch()
+    return system("command -v git > /dev/null 2>&1 && git rev-parse --abbrev-ref HEAD 2>/dev/null | tr -d '\n'")
+  endfunction
+
+  function! StatuslineGit()
     let l:branchname = GitBranch()
     return strlen(l:branchname) > 0?'  '.l:branchname.' ':''
-endfunction
+  endfunction
 
-set statusline=
-set statusline+=%#PmenuSel#
-set statusline+=%{StatuslineGit()}
-set statusline+=%#LineNr#
-set statusline+=\ %f
-set statusline+=\ %m
-set statusline+=%=
-set statusline+=%#CursorColumn#
-set statusline+=\ %y
-set statusline+=\ %{&fileencoding?&fileencoding:&encoding}
-set statusline+=\[%{&fileformat}\]
-set statusline+=\ %p%%
-set statusline+=\ %l:%c
-set statusline+=%{gutentags#statusline()}
-set statusline+=\ 
-" End Statusline
+  set statusline=
+  set statusline+=%#PmenuSel#
+  set statusline+=%{StatuslineGit()}
+  set statusline+=%#LineNr#
+  set statusline+=\ %f
+  set statusline+=\ %m
+  set statusline+=%=
+  set statusline+=%#CursorColumn#
+  set statusline+=\ %y
+  set statusline+=\ %{&fileencoding?&fileencoding:&encoding}
+  set statusline+=\[%{&fileformat}\]
+  set statusline+=\ %p%%
+  set statusline+=\ %l:%c
+  set statusline+=%{gutentags#statusline()}
+  set statusline+=\ 
+  " End Statusline
+endif
+
 
 if has("nvim") && $COLORTERM =~? 'truecolor'
   set termguicolors
@@ -191,27 +203,22 @@ imap <c-'> <CMD>:call CompleteInf()<CR>
 
 set path+=** " Provides tab-completion for all file-related tasks
 
+let g:ale_completion_enabled = 1
+" Fine-tune when linters run.
+let g:ale_lint_on_text_changed = 'never'
+let g:ale_lint_on_insert_leave = 1
+let g:ale_lint_on_enter = 0
+
+let g:ale_sign_error = '●'
+let g:ale_sign_warning = '.'
+
 " Set completion
 if has('nvim') || version >= 801
   " Ale setup
-  let g:ale_completion_enabled = 1
-  " Fine-tune when linters run.
-  let g:ale_lint_on_text_changed = 'never'
-  let g:ale_lint_on_insert_leave = 1
-  " don't want linters to run on opening a file
-  let g:ale_lint_on_enter = 0
   set omnifunc=ale#completion#OmniFunc
-
-
-  " GoTo code navigation.
-  " nnoremap <Leader>nt :NERDTreeToggle<CR>
-  nnoremap <silent> gd <Plug>:ALEGoToDefinition<CR>
-  nnoremap <silent> gy <Plug>:ALEGoToTypeDefinition<CR>
-  nnoremap <silent> gr <Plug>:ALEFindReferences<CR>
 else
   set omnifunc=syntaxcomplete#Complete
 endif
-
 
 " allow backspacing over everything in insert mode
 set backspace=indent,eol,start
@@ -276,6 +283,16 @@ nnoremap <Space> <Nop>
 nnoremap <Leader>nt :NERDTreeToggle<CR>
 nnoremap <Leader>tt :TagbarToggle<CR>
 
+" Setup Linting/LSP.
+if has('nvim') || version >= 801
+  nnoremap <Leader>gd :ALEGoToDefinition<CR>
+  nnoremap <Leader>gy :ALEGoToTypeDefinition<CR>
+  nnoremap <Leader>gr :ALEFindReferences<CR>
+  nnoremap <Leader>an :ALENextWrap<CR>
+  nnoremap <Leader>al :ALELint<CR>
+  nnoremap <Leader>af :ALEFix<CR>
+endif
+
 " Copy to and paste from system clipboard
 vnoremap <silent> <leader>y "+y
 nnoremap <silent> <leader>Y "+yg_
@@ -286,10 +303,10 @@ vnoremap <silent> <leader>p "+p
 vnoremap <silent> <leader>P "+P
 
 " Leader-based window movement
-nnoremap <silent> <leader>j <C-w>j
-nnoremap <silent> <leader>k <C-w>k
-nnoremap <silent> <leader>h <C-w>h
-nnoremap <silent> <leader>l <C-w>l
+nnoremap <silent> <leader>wj <C-w>j
+nnoremap <silent> <leader>wk <C-w>k
+nnoremap <silent> <leader>wh <C-w>h
+nnoremap <silent> <leader>wl <C-w>l
 nnoremap <silent> <leader>ws :split<cr>
 nnoremap <silent> <leader>wv :vsplit<cr>
 nnoremap <silent> <leader>wc <C-w>c
@@ -491,7 +508,7 @@ if !exists(":DiffOrig")
                           \ | wincmd p | diffthis
 endif
 
-" When vim is started at a folder containing a .lvimrc.vim, source it. Fail
-" silently if not.
+" When pwd contains .lvimrc.vim or projectrc.vim, source it. Or fail silently.
 silent! so .lvimrc.vim
+silent! so projectrc.vim
 " END Vimrc.

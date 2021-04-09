@@ -3,6 +3,7 @@ plugins/*
 
 base/phpdev/vendor
 base/phpdev/wpcs
+base/phpdev/phpactor
 
 .secrets
 tags
