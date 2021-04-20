@@ -1,11 +1,12 @@
 " -------------------
 " VIMRC
 "--------------------
+"
+" vim:set ft=vim et sw=2:
 
 set nocompatible
 set encoding=utf-8
 set hidden
-
 
 " Having longer updatetime (default is 4000 ms = 4 s) leads to noticeable
 " delays and poor user experience.
@@ -23,7 +24,7 @@ set splitright
 set ignorecase
 set smartcase
 
-" Set the terminal to be zsh
+" Set the terminal shell.
 set shell=/bin/bash
 
 set history=200        " keep more lines of command line history
@@ -43,6 +44,7 @@ endif
 
 call plug#begin('~/.vim/plugged')
 
+" Tpope stuff.
 Plug 'tpope/vim-sensible'
 Plug 'tpope/vim-fugitive'
 Plug 'tpope/vim-surround'
@@ -53,31 +55,41 @@ Plug 'editorconfig/editorconfig-vim'
 Plug 'scrooloose/nerdtree'
 Plug 'leafgarland/typescript-vim'
 Plug 'stanangeloff/php.vim'
-Plug 'rust-lang/rust.vim'
 Plug 'glench/vim-jinja2-syntax'
-Plug 'cespare/vim-toml'
 Plug 'tomasr/molokai'
 Plug 'vim-airline/vim-airline'
 Plug 'vim-airline/vim-airline-themes'
+Plug 'mhinz/vim-startify'
 
 Plug 'gioele/vim-autoswap'
 
 Plug 'ludovicchabant/vim-gutentags'
 
-Plug 'SirVer/ultisnips'
-Plug 'honza/vim-snippets'
-
-if has('nvim') || version >= 801
-  Plug 'supercollider/scvim'
-  Plug 'neomake/neomake'
-  Plug 'preservim/tagbar'
-  Plug 'w0rp/ale'
-
-  if executable('go')
-    Plug 'fatih/vim-go', { 'do': ':GoUpdateBinaries' }
+" Autocompletion
+if has('python3')
+  if has('nvim')
+    Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
+  else
+    Plug 'Shougo/deoplete.nvim'
+    Plug 'roxma/nvim-yarp'
+    Plug 'roxma/vim-hug-neovim-rpc'
   endif
+
+  Plug 'Shougo/neco-syntax'
+  Plug 'Shougo/deoplete-clangx'
+  Plug 'phpactor/phpactor' ,  {'do': 'composer install', 'for': 'php'}
+  Plug 'kristijanhusak/deoplete-phpactor'
+  Plug 'deoplete-plugins/deoplete-tag'
+  Plug 'deoplete-plugins/deoplete-jedi'
+
+else
+  Plug 'vim-scripts/AutoComplPop'
 endif
 
+if has('nvim') || version >= 801
+  Plug 'preservim/tagbar'
+  Plug 'w0rp/ale'
+endif
 
 if version >= 704
   Plug 'junegunn/fzf', { 'dir': '~/.fzf', 'do': './install --bin' }
@@ -90,6 +102,8 @@ endif
 
 if has('python3')
   Plug 'vim-vdebug/vdebug'
+  Plug 'SirVer/ultisnips'
+  Plug 'honza/vim-snippets'
 endif
 
 call plug#end()
@@ -117,6 +131,22 @@ let g:netrw_winsize = 25
 let g:netrw_liststyle = 3
 let g:netrw_browse_split = 4
 let g:netrw_altv = 1
+
+" Startify
+let g:startify_session_dir = '~/.vim/session'
+let g:startify_custom_header = [
+      \ '             _',
+      \ ' _ __   __ _| | __',
+      \ '|  _ \ / _  | |/ / ',
+      \ '| |_) | (_| |   <',
+      \ '|  __/ \__  |_|\_\',
+      \ '|_|    |___/',
+      \]
+let g:startify_files_number = 4
+let g:startify_commands = [
+    \ {'s': [' Write standup', ':Standup']},
+    \ {'v': [' Edit .virmc', ':Evimrc']},
+    \ ]
 
 " Gutentag setup
 let g:gutentags_cache_dir = '~/.vim/gutentags'
@@ -157,7 +187,6 @@ else
   set statusline+=\[%{&fileformat}\]
   set statusline+=\ %p%%
   set statusline+=\ %l:%c
-  set statusline+=%{gutentags#statusline()}
   set statusline+=\ 
   " End Statusline
 endif
@@ -180,30 +209,8 @@ function! SetDarkColour()
   execute 'colorscheme molokai'
 endfunction
 
-if has("nvim") || has("terminal")
-  let g:scTerminalBuffer = "on"
-endif
-
-function! PInsert2(item)
-  let @z=a:item
-  norm "zp
-  call feedkeys('a')
-endfunction
-
-function! CompleteInf()
-  let nl=[]
-  let l=complete_info()
-  for k in l['items']
-    call add(nl, k['word']. ' : ' .k['info'] . ' '. k['menu'] )
-  endfor
-  call fzf#vim#complete(fzf#wrap({ 'source': nl,'reducer': { lines -> split(lines[0], '\zs :')[0] },'sink':function('PInsert2')}))
-endfunction 
-
-imap <c-'> <CMD>:call CompleteInf()<CR>
-
 set path+=** " Provides tab-completion for all file-related tasks
 
-let g:ale_completion_enabled = 1
 " Fine-tune when linters run.
 let g:ale_lint_on_text_changed = 'never'
 let g:ale_lint_on_insert_leave = 1
@@ -213,9 +220,18 @@ let g:ale_sign_error = '●'
 let g:ale_sign_warning = '.'
 
 " Set completion
-if has('nvim') || version >= 801
-  " Ale setup
-  set omnifunc=ale#completion#OmniFunc
+if (has('nvim') || version >= 801)
+  if has('python3')
+    let g:ale_completion_enabled = 0
+    let g:deoplete#enable_at_startup = 1
+    call deoplete#custom#source('ale', 'rank', 999)
+    call deoplete#custom#source('ultisnips', 'rank', 888)
+    call deoplete#custom#option('sources', {'php' : ['ale', 'ultisnips', 'tag', 'phpactor', 'around', 'buffer']})
+  else
+  " Use Ale omnifunc.
+    let g:ale_completion_enabled = 1
+    set omnifunc=ale#completion#OmniFunc
+  endif
 else
   set omnifunc=syntaxcomplete#Complete
 endif
@@ -284,7 +300,7 @@ nnoremap <Leader>nt :NERDTreeToggle<CR>
 nnoremap <Leader>tt :TagbarToggle<CR>
 
 " Setup Linting/LSP.
-if has('nvim') || version >= 801
+if (has('nvim') || version >= 801)
   nnoremap <Leader>gd :ALEGoToDefinition<CR>
   nnoremap <Leader>gy :ALEGoToTypeDefinition<CR>
   nnoremap <Leader>gr :ALEFindReferences<CR>
@@ -333,42 +349,47 @@ inoremap <C-U> <C-G>u<C-U>
 
 " Remap Greek letters to normal mode letters
 " Not all chars can be cleanly remapped though, for example q and ;
-nnoremap ς w
-nnoremap τ t
-nnoremap υ y
-nnoremap υυ yy
-nnoremap Υ Υ
-nnoremap Θ U
-nnoremap θ u
-nnoremap ο ο
-nnoremap ι i
-nnoremap Ι I
-nnoremap Ο O
-nnoremap π p
-nnoremap Π P
+nmap ς w
+nmap τ t
+nmap υ y
+nmap υυ yy
+nmap Υ Υ
+nmap Θ U
+nmap θ u
+nmap ο ο
+nmap ι i
+nmap Ι I
+nmap Ο O
+nmap π p
+nmap Π P
 
-nnoremap α a
-nnoremap Α A
-nnoremap σ s
-nnoremap δ d
-nnoremap δδ dd
-nnoremap φ f
-nnoremap γ g
-nnoremap η h
-nnoremap ξ j
-nnoremap κ k
-nnoremap λ l
+nmap α a
+nmap Α A
+nmap σ s
+nmap δ d
+nmap φ f
+nmap γ g
+nmap γγ gg
+nmap Γ G
+nmap δδ dd
+nmap φ f
+nmap γ g
 
-nnoremap ζ z
-nnoremap χ x
-nnoremap ψ c
-nnoremap ω v
-nnoremap Ω V
-nnoremap β b
-nnoremap Β B
-nnoremap ν n
-nnoremap Ν N
-nnoremap μ m
+nmap η h
+nmap ξ j
+nmap κ k
+nmap λ l
+
+nmap ζ z
+nmap χ x
+nmap ψ c
+nmap ω v
+nmap Ω V
+nmap β b
+nmap Β B
+nmap ν n
+nmap Ν N
+nmap μ m
 
 " Do not recognize octal numbers for Ctrl-A and Ctrl-X, most users find it confusing.
 set nrformats-=octal
