@@ -35,13 +35,6 @@ set scrolloff=5        " Maintain more context around the cursor
 set visualbell         " No sound plz.
 set autoread           " Reread a file when it's changed outside of vim.
 
-" Install vim-plug if missing
-" if empty(glob('~/.vim/autoload/plug.vim'))
-"   silent !curl -fLo ~/.vim/autoload/plug.vim --create-dirs
-"     \ https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
-"   autocmd VimEnter * PlugInstall --sync | source $MYVIMRC
-" endif
-
 call plug#begin('~/.vim/plugged')
 
 " Tpope stuff.
@@ -56,6 +49,7 @@ Plug 'scrooloose/nerdtree'
 Plug 'leafgarland/typescript-vim'
 Plug 'stanangeloff/php.vim'
 Plug 'glench/vim-jinja2-syntax'
+
 Plug 'tomasr/molokai'
 Plug 'vim-airline/vim-airline'
 Plug 'vim-airline/vim-airline-themes'
@@ -63,35 +57,30 @@ Plug 'mhinz/vim-startify'
 
 Plug 'gioele/vim-autoswap'
 
-Plug 'ludovicchabant/vim-gutentags'
+if has('ctags')
+  Plug 'ludovicchabant/vim-gutentags'
+endif
 
-" Autocompletion
 if has('python3')
-  if has('nvim')
-    Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
-  else
-    Plug 'Shougo/deoplete.nvim'
-    Plug 'roxma/nvim-yarp'
-    Plug 'roxma/vim-hug-neovim-rpc'
-  endif
-
-  Plug 'Shougo/neco-syntax'
-  Plug 'Shougo/deoplete-clangx'
-  Plug 'phpactor/phpactor' ,  {'do': 'composer install', 'for': 'php'}
-  Plug 'kristijanhusak/deoplete-phpactor'
-  Plug 'deoplete-plugins/deoplete-tag'
-  Plug 'deoplete-plugins/deoplete-jedi'
-
   Plug 'vim-vdebug/vdebug'
   Plug 'SirVer/ultisnips'
   Plug 'honza/vim-snippets'
-else
-  Plug 'vim-scripts/AutoComplPop'
+  Plug 'prabirshrestha/asyncomplete-ultisnips.vim'
 endif
 
 if has('nvim') || version >= 801
   Plug 'preservim/tagbar'
   Plug 'w0rp/ale'
+  " Lsp
+  Plug 'prabirshrestha/vim-lsp'
+  Plug 'mattn/vim-lsp-settings'
+  " Autocompletion
+  Plug 'prabirshrestha/asyncomplete.vim'
+  Plug 'prabirshrestha/asyncomplete-lsp.vim'
+  Plug 'prabirshrestha/asyncomplete-buffer.vim'
+  Plug 'phpactor/phpactor' ,  {'do': 'composer install', 'for': 'php'}
+else
+  Plug 'vim-scripts/AutoComplPop'
 endif
 
 if version >= 704
@@ -142,7 +131,7 @@ let g:startify_commands = [
     \ {'v': [' Edit .virmc', ':Evimrc']},
     \ ]
 
-" Gutentag setup
+" Gutentags setup
 let g:gutentags_cache_dir = '~/.vim/gutentags'
 let g:gutentags_ctags_exclude = ['*.json', '*.xml', '*.yml', '*.min.js', '*.css', '*.min.css', 'node_modules',
                               \ '*.phar', '*.ini', '*.rst', '*.md', '*dist/*',
@@ -215,17 +204,9 @@ let g:ale_sign_warning = '.'
 
 " Set completion
 if (has('nvim') || version >= 801)
-  if has('python3')
-    let g:ale_completion_enabled = 0
-    let g:deoplete#enable_at_startup = 1
-    call deoplete#custom#source('ale', 'rank', 999)
-    call deoplete#custom#source('ultisnips', 'rank', 888)
-    call deoplete#custom#option('sources', {'php' : ['ale', 'ultisnips', 'tag', 'phpactor', 'around', 'buffer']})
-  else
   " Use Ale omnifunc.
-    let g:ale_completion_enabled = 1
-    set omnifunc=ale#completion#OmniFunc
-  endif
+    " let g:ale_completion_enabled = 1
+    " set omnifunc=ale#completion#OmniFunc
 else
   set omnifunc=syntaxcomplete#Complete
 endif
@@ -302,6 +283,25 @@ if (has('nvim') || version >= 801)
   nnoremap <Leader>al :ALELint<CR>
   nnoremap <Leader>af :ALEFix<CR>
 endif
+
+if has('python3')
+    let g:UltiSnipsExpandTrigger="<c-e>"
+    call asyncomplete#register_source(asyncomplete#sources#ultisnips#get_source_options({
+        \ 'name': 'ultisnips',
+        \ 'allowlist': ['*'],
+        \ 'completor': function('asyncomplete#sources#ultisnips#completor'),
+        \ }))
+endif
+
+call asyncomplete#register_source(asyncomplete#sources#buffer#get_source_options({
+    \ 'name': 'buffer',
+    \ 'allowlist': ['*'],
+    \ 'blocklist': ['go'],
+    \ 'completor': function('asyncomplete#sources#buffer#completor'),
+    \ 'config': {
+    \    'max_buffer_size': 5000000,
+    \  },
+    \ }))
 
 " Copy to and paste from system clipboard
 vnoremap <silent> <leader>y "+y
@@ -393,12 +393,6 @@ command! Ctgen !ctags -R --exclude=.git --exclude=node_modules --exclude=vendor 
 command! Rlvimrc :source ~/.vimrc
 command! Evimrc :e ~/.vimrc
 
-function! EditStandups()
-  :e ~/Sync/docs/standups.md
-  :normal gg
-endfunction
-
-command! Standup call EditStandups()
 command! Clight call SetLightColour()
 command! Cdark call SetDarkColour()
 
@@ -465,13 +459,11 @@ endif
 if has("autocmd")
   " Enable file type detection.
   filetype plugin indent on
-  au Filetype go nnoremap <leader>r :GoRun %<CR>
   " Put these in an autocmd group, so that we can delete them easily.
   augroup vimrcEx
   au!
 
   autocmd FileType javascript setlocal ts=4 sts=4 sw=4
-  autocmd BufNewFile,BufRead *.tsx set syntax=ts
 
   " When editing a file, always jump to the last known cursor position.
   " Don't do it when the position is invalid or when inside an event handler
@@ -484,17 +476,6 @@ if has("autocmd")
     \ endif
 
   " key bindings
-  if has("nvim") || version >= 801
-    au Filetype supercollider nnoremap <buffer> <leader>sr :call SClang_block()<CR>
-    au Filetype supercollider nnoremap <buffer> <M-R> :call SClang_block()<CR>
-    au Filetype supercollider inoremap <buffer> <M-R> :call SClang_block()<CR>
-    au Filetype supercollider vnoremap <buffer> <M-R> :call SClang_block()<CR>
-
-    au Filetype supercollider nnoremap <buffer> <leader>r :call SClang_line()<CR>
-    au Filetype supercollider nnoremap <buffer> <M-r> :call SClang_line()<CR>
-    au Filetype supercollider inoremap <buffer> <M-r> :call SClang_line()<CR>
-    au Filetype supercollider vnoremap <buffer> <M-r> :call SClang_line()<CR>
-  endif
   augroup END
 else
   set autoindent " always set autoindenting on
