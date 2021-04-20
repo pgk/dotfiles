@@ -36,11 +36,11 @@ set visualbell         " No sound plz.
 set autoread           " Reread a file when it's changed outside of vim.
 
 " Install vim-plug if missing
-if empty(glob('~/.vim/autoload/plug.vim'))
-  silent !curl -fLo ~/.vim/autoload/plug.vim --create-dirs
-    \ https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
-  autocmd VimEnter * PlugInstall --sync | source $MYVIMRC
-endif
+" if empty(glob('~/.vim/autoload/plug.vim'))
+"   silent !curl -fLo ~/.vim/autoload/plug.vim --create-dirs
+"     \ https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
+"   autocmd VimEnter * PlugInstall --sync | source $MYVIMRC
+" endif
 
 call plug#begin('~/.vim/plugged')
 
@@ -82,6 +82,9 @@ if has('python3')
   Plug 'deoplete-plugins/deoplete-tag'
   Plug 'deoplete-plugins/deoplete-jedi'
 
+  Plug 'vim-vdebug/vdebug'
+  Plug 'SirVer/ultisnips'
+  Plug 'honza/vim-snippets'
 else
   Plug 'vim-scripts/AutoComplPop'
 endif
@@ -94,16 +97,6 @@ endif
 if version >= 704
   Plug 'junegunn/fzf', { 'dir': '~/.fzf', 'do': './install --bin' }
   Plug 'junegunn/fzf.vim'
-endif
-
-if has('nvim')
-  Plug 'kassio/neoterm'
-endif
-
-if has('python3')
-  Plug 'vim-vdebug/vdebug'
-  Plug 'SirVer/ultisnips'
-  Plug 'honza/vim-snippets'
 endif
 
 call plug#end()

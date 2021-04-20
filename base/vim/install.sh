@@ -15,6 +15,7 @@ ln -sf "$PLUGIN_PATH/.vimrc" "$HOME/.vimrc"
 ln -sf "$PLUGIN_PATH/.vim/ftplugin" "$HOME/.vim"
 ln -sf "$PLUGIN_PATH/.vim/plugin" "$HOME/.vim"
 ln -sf "$PLUGIN_PATH/.vim/syntax" "$HOME/.vim"
+ln -sf "$PLUGIN_PATH/.vim/autoload" "$HOME/.vim"
 ln -sf "$PLUGIN_PATH/.config/nvim/init.vim" "$HOME/.config/nvim/init.vim"
 ln -sf "$PLUGIN_PATH/.config/nvim/coc-settings.json" "$HOME/.config/nvim/coc-settings.json"
 
