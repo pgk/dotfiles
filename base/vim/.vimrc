@@ -142,9 +142,10 @@ let g:startify_custom_header = [
       \ '|  __/ \__  |_|\_\',
       \ '|_|    |___/',
       \]
-let g:startify_files_number = 4
+let g:startify_files_number = 5
 let g:startify_commands = [
-    \ {'s': [' Write standup', ':Standup']},
+    \ ':help reference',
+    \ {'s': [' Standup', ':Standup']},
     \ {'v': [' Edit .virmc', ':Evimrc']},
     \ ]
 
