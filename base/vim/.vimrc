@@ -56,10 +56,9 @@ Plug 'vim-airline/vim-airline-themes'
 Plug 'mhinz/vim-startify'
 
 Plug 'gioele/vim-autoswap'
+Plug 'vim-scripts/dbext.vim'
 
-if has('ctags')
-  Plug 'ludovicchabant/vim-gutentags'
-endif
+Plug 'ludovicchabant/vim-gutentags'
 
 if has('python3')
   Plug 'vim-vdebug/vdebug'
@@ -201,6 +200,9 @@ let g:ale_lint_on_enter = 0
 
 let g:ale_sign_error = '●'
 let g:ale_sign_warning = '.'
+let g:lsp_diagnostics_signs_error = {'text': '●'}
+let g:lsp_diagnostics_signs_warning = {'text': '.'} " icons require GUI
+let g:lsp_diagnostics_signs_hint = {'text': '♦'} " icons require GUI
 
 " Set completion
 if (has('nvim') || version >= 801)
@@ -284,24 +286,27 @@ if (has('nvim') || version >= 801)
   nnoremap <Leader>af :ALEFix<CR>
 endif
 
-if has('python3')
-    let g:UltiSnipsExpandTrigger="<c-e>"
-    call asyncomplete#register_source(asyncomplete#sources#ultisnips#get_source_options({
-        \ 'name': 'ultisnips',
-        \ 'allowlist': ['*'],
-        \ 'completor': function('asyncomplete#sources#ultisnips#completor'),
-        \ }))
-endif
+if (has('nvim') || version >= 801)
+  if has('python3')
+      let g:UltiSnipsExpandTrigger="<tab>"
+      call asyncomplete#register_source(asyncomplete#sources#ultisnips#get_source_options({
+          \ 'name': 'ultisnips',
+          \ 'allowlist': ['*'],
+          \ 'completor': function('asyncomplete#sources#ultisnips#completor'),
+          \ }))
+  endif
 
-call asyncomplete#register_source(asyncomplete#sources#buffer#get_source_options({
-    \ 'name': 'buffer',
-    \ 'allowlist': ['*'],
-    \ 'blocklist': ['go'],
-    \ 'completor': function('asyncomplete#sources#buffer#completor'),
-    \ 'config': {
-    \    'max_buffer_size': 5000000,
-    \  },
-    \ }))
+  call asyncomplete#register_source(asyncomplete#sources#buffer#get_source_options({
+      \ 'name': 'buffer',
+      \ 'allowlist': ['*'],
+      \ 'blocklist': ['go'],
+      \ 'completor': function('asyncomplete#sources#buffer#completor'),
+      \ 'config': {
+      \    'max_buffer_size': 5000000,
+      \  },
+      \ }))
+
+endif
 
 " Copy to and paste from system clipboard
 vnoremap <silent> <leader>y "+y
