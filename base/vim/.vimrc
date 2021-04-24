@@ -51,6 +51,8 @@ Plug 'stanangeloff/php.vim'
 Plug 'glench/vim-jinja2-syntax'
 
 Plug 'tomasr/molokai'
+Plug 'altercation/vim-colors-solarized'
+
 Plug 'vim-airline/vim-airline'
 Plug 'vim-airline/vim-airline-themes'
 Plug 'mhinz/vim-startify'
@@ -178,12 +180,14 @@ if has("nvim") && $COLORTERM =~? 'truecolor'
   set termguicolors
 endif
 
-set background=dark
-colorscheme molokai
+let g:solarized_termcolors=256
+set background=light
+colorscheme solarized
 
 function! SetLightColour()
   set background=light
-  execute 'colorscheme morning'
+  execute 'set background=light'
+  execute 'colorscheme solarized'
 endfunction
 
 function! SetDarkColour()
