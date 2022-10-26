@@ -64,7 +64,9 @@ do
 done
 
 
-source "$HOME/.dotfileprefs"
+if [ -f "$HOME/.dotfileprefs" ]; then
+  source "$HOME/.dotfileprefs"
+fi
 
 bash "$DOTFILE_FOLDER/base/bash/install.sh"
 bash "$DOTFILE_FOLDER/base/git/install.sh"
