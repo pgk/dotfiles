@@ -2,7 +2,7 @@
 # installing a bunch of language servers and linters.
 
 command -v shellcheck > /dev/null || {
-  brew install shellcheck
+  command -v  > /dev/null && brew install shellcheck
 }
 
 command -v npm && {
