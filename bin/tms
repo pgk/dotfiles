@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# set -e
+# set -x
+
+if [ "$#" -gt 0 ]; then
+    selected="$1"
+else
+    selected=$(find ~/dev ~/Library/Application\ Support/REAPER/Effects -mindepth 1 -maxdepth 1 -type d | fzf)
+fi
+
+if [ "$#" -gt 1 ]; then
+    selected_name="$2"
+else
+    selected_name=$(basename "$selected" | tr . _)
+fi
+
+if [ -z "$selected" ]; then
+    exit 0
+fi
+
+# tmux_running=$(pgrep tmux)
+echo "$selected_name $selected"
+
+# conf_session() {
+  # tmux rename-window -t "$selected_name":1 repo
+  # tmux new-window -t "$selected_name":2
+  # tmux rename-window -t "$selected_name":2 code
+  # tmux send-keys -t "$selected_name":2 nvim Enter
+# }
+
+if [ -z "$TMUX" ] && [ ! tmux info &> /dev/null ]; then
+    tmux new-session -s $selected_name -c $selected
+    # conf_session
+    exit 0
+fi
+
+if ! tmux has-session -t "$selected_name" 2> /dev/null; then
+  tmux new-session -s "$selected_name" -d -c "$selected"
+  # conf_session
+fi
+
+if [ ! "$TMUX" ]; then
+  tmux attach -t "$selected_name"
+else
+  tmux switch-client -t $selected_name
+fi

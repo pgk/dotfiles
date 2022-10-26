@@ -1,0 +1,46 @@
+#!/bin/bash
+
+# Usage: watch_url URL [Interval] | sendmail "URL changed"
+function fail() {
+  echo "$1" >&2
+  exit 1
+}
+
+[ $# -eq 0 ] && {
+  fail "See usage\n"
+}
+
+command -v curl || {
+  fail "Curl missing\n"
+}
+
+watchdir="$HOME/.watch_url"
+
+[ -d "$watchdir" ] || {
+  mkdir -p "$watchdir"
+}
+
+urlhash=$(echo -n "$1" | sha256sum -z | awk '{print $1}' |tr -d '\n')
+
+echo $urlhash
+exit 0
+tmpfile="$watchdir/$urlhash"
+
+if [ -f "$tmpfile" ]; then
+  currentsha=$(cat "$tmpfile")
+else 
+  currentsha=""
+fi
+
+reqsha=$(curl $1 | sha256sum -z | awk '{print $1}' |tr -d '\n')
+
+[ $? -eq 0 ] || {
+  fail "Curl req failed\n"
+}
+
+if [ "$currentsha" -ne "$reqsha" ]; then
+  # changed
+  echo "$1 $reqsha $tmpfile" >&1
+  cat "$reqsha" > "$tmpfile"
+fi
+

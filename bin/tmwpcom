@@ -1,0 +1,18 @@
+#!/usr/bin/env sh
+if ! tmux has-session -t wpcom; then
+  tmux new -s wpcom -d
+  tmux rename-window -t wpcom:1 sandbox
+  tmux send-keys -t wpcom:1 'cd ~/dev/wpcom_sandbox' Enter
+  tmux send-keys -t wpcom:1 mosh wpcom Enter
+
+  tmux new-window -t wpcom:2
+  tmux send-keys -t wpcom:2 'cd ~/dev/wpcom_sandbox' Enter
+  tmux rename-window -t wpcom:2 unison
+  tmux send-keys -t wpcom:2 'uniwatch wpcom' Enter
+
+  tmux new-window -t wpcom:3
+  tmux rename-window -t wpcom:3 code
+  tmux send-keys -t wpcom:3 'cd ~/dev/wpcom_sandbox' Enter
+  tmux send-keys -t wpcom:3 nvim Enter
+fi
+tmux attach -t wpcom

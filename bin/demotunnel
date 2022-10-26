@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+localport=${1:-80}
+remoteport=${2:-3114}
+
+set -e 
+echo "proxying all remote reqs to :$remoteport to localhost:$localport"
+
+ssh -R 127.0.01:"$remoteport":localhost:"$localport" -N site
+
+

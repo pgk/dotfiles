@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+
+set -e
+
+selected_name=$(tmux list-sessions | awk -F ':' '{print $1}' | fzf)
+
+tmux_running=$(pgrep tmux)
+
+if [ -z "$selected_name" ]; then
+  exit 1
+fi
+
+if [[ -z $TMUX ]] && [[ -z $tmux_running ]]; then
+  echo 'tmux not runnning?'
+  exit 0
+fi
+
+if ! tmux has-session -t "$selected_name" 2> /dev/null; then
+  echo 'session missing'
+  exit 1
+fi
+
+if [ ! "$TMUX" ]; then
+  tmux attach -t "$selected_name"
+else
+  tmux switch-client -t $selected_name
+fi
+

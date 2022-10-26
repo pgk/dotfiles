@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+command -v svn >/dev/null 2>&1 || {
+  echo "svn not found. Exiting" >&2
+  exit 1
+}
+
+svn st | grep '^\?' | awk '{ print $2 }'

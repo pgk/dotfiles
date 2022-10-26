@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# coding: utf-8
+
+set -e
+
+command -v php > /dev/null 2>&1 || {
+  exit 0
+}
+
+# if we have a phpcbf bin elsewhere, let it take precedence.
+command -v phpcbf > /dev/null 2>&1 && {
+  phpcbf "$@"
+  exit "$?"
+}
+
+thisdir="$HOME/dev/phpdev"
+
+[ -f "$thisdir/vendor/bin/phpcbf" ] && {
+  php "$thisdir/vendor/bin/phpcbf" --standard=WordPress,WordPress-Extra "$@"
+  exit "$?"
+}
+
+# binfile="$HOME/dotfiles/base/phpdev/vendor/bin/phpcbf"
+# xmlfile="$HOME/dotfiles/base/phpdev/phpcx.xml"
+
+# [ -f "$binfile" ] && {
+#   php "$binfile" --standard=WordPress "$@"
+#   exit "$?"
+# }

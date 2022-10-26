@@ -1,0 +1,25 @@
+#!/usr/bin/env sh
+if ! tmux has-session -t std; then
+  tmux new -s std -d
+  tmux rename-window -t std:1 default
+  # tmux send-keys -t std:1 stdproxy.sh Enter
+
+  tmux split-window -t std:1 -h
+
+  # tmux new-window -t std:3
+  # tmux rename-window -t std:3 ssh-wpcom
+  # tmux split-window -t std:3 -h
+  # tmux send-keys -t std:3.0 'ssh wpcom' Enter
+  # tmux send-keys -t std:3.1 'uniwatch wpcom' Enter
+
+  # tmux new-window -t std:4
+  # tmux rename-window -t std:4 vim-cs
+  # tmux send-keys -t std:4 'cd ~/dev/polldaddy_svn' Enter
+  # tmux send-keys -t std:4 vim Enter
+
+  # tmux new-window -t std:5
+  # tmux rename-window -t std:5 vim-wpcom
+  # tmux send-keys -t std:5 'cd ~/dev/wpcom_svn' Enter
+  # tmux send-keys -t std:5 vim Enter
+fi
+tmux attach -t std

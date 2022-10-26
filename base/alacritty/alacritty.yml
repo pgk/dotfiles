@@ -1,0 +1,23 @@
+font:
+  normal:
+    family: Inconsolata Nerd Font Mono
+    style: Medium
+
+  bold:
+    family: Inconsolata Nerd Font Mono
+    style: Bold
+
+  italic:
+    family: Inconsolata Nerd Font Mono
+    style: Italic
+
+  bold_italic:
+    family: Inconsolata Nerd Font Mono
+    style: Bold Italic
+
+  size: 17
+live_config_reload: true
+env:
+  TERM: xterm-256color
+import:
+  - ~/dotfiles/base/alacritty/themes/current.yml

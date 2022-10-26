@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+
+set -e
+
+command -v ffmpeg >/dev/null 2>&1 || {
+  echo "ffmpeg not found" >&2
+  exit 1
+}
+
+if [ ! "$1" ]; then
+  echo "Provide an input" >&2
+  exit 1
+fi
+
+myinput="$1"
+myoutput="$myinput".wav
+
+if [ "$2" ]; then
+  myoutput="$2"
+fi
+
+ffmpeg -y -i "$myinput" -acodec pcm_s16le -ac 2 "$myoutput" >/dev/null
+
+echo "$myoutput"

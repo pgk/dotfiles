@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# coding: utf-8
+
+set -e
+
+command -v php > /dev/null 2>&1 || {
+  exit 0
+}
+
+# if we have a phpcs bin elsewhere, let it take precedence.
+command -v phpcs > /dev/null 2>&1 && {
+  phpcs "$@"
+  exit "$?"
+}
+
+thisdir="$HOME/dev/phpdev"
+
+[ -f "$thisdir/vendor/bin/phpcs" ] && {
+  php "$thisdir/vendor/bin/phpcs" --standard=WordPress,WordPress-Extra "$@"
+  exit "$?"
+}
+# thisdir=$(pwd)
+
+# [ -f "$thisdir/vendor/bin/phpcs" ] && {
+#   php "$thisdir/vendor/bin/phpcs" "$@"
+#   exit "$?"
+# }
+
+# binfile="$HOME/dotfiles/base/phpdev/vendor/bin/phpcs"
+# xmlfile="$HOME/dotfiles/base/phpdev/phpcx.xml"
+
+# [ -f "$binfile" ] && {
+#   php "$binfile" --standard=WordPress "$@"
+#   exit "$?"
+# }

@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# coding: utf-8
+
+set -e
+
+command -v php > /dev/null 2>&1 || {
+  exit 0
+}
+
+# if we have a bin elsewhere, let it take precedence.
+command -v psalm > /dev/null 2>&1 && {
+  phpcs "$@"
+  exit "$?"
+}
+
+thisdir=$(pwd)
+
+[ -f "$thisdir/vendor/bin/psalm" ] && {
+  php "$thisdir/vendor/bin/psalm" "$@"
+  exit "$?"
+}
+
+binfile="$HOME/dotfiles/base/phpdev/vendor/bin/psalm"
+
+[ -f "$binfile" ] && {
+  php "$binfile" "$@"
+  exit "$?"
+}

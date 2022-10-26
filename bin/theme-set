@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# coding: utf-8
+
+set -e
+
+full_path=$(realpath "$0")
+BIN_PATH=$(dirname "$full_path")
+ROOT_PATH=$(dirname "$BIN_PATH")
+
+# echo "$ROOT_PATH"
+
+PLUGIN_DIR="$ROOT_PATH/base/alacritty"
+
+[ -d "$PLUGIN_DIR" ] || {
+	echo "$PLUGIN_DIR is not there."
+exit 1
+}
+
+# mkdir -p "$HOME/.config/alacritty"
+if [ "$1" == 'dark' ]; then
+  # cat "$PLUGIN_DIR/themes/tokyo-night.yml"
+  cat "$PLUGIN_DIR/themes/tokyo-night.yml" > "$PLUGIN_DIR/themes/current.yml"
+cat << EOF > ~/.vim-default-colors.vim
+let g:solarized_termcolors=256
+set background=dark
+if has('nvim')
+  colorscheme tokyonight
+else
+  colorscheme solarized
+endif
+
+EOF
+elif [ "$1" == 'light' ]; then
+  cat "$PLUGIN_DIR/themes/solarized-light.yml" > "$PLUGIN_DIR/themes/current.yml"
+cat << EOF > ~/.vim-default-colors.vim
+let g:solarized_termcolors=256
+set background=light
+colorscheme solarized
+EOF
+fi
+
+
+# /Users/pgk/dotfiles/base/alacritty/themes/solarized-light.yml
+
+# touch "$ROOT_PATH/base/alacritty/alacritty.yml"

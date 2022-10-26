@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+set -e
+
+command -v lame >/dev/null 2>&1 || {
+  echo "lame not found" >&2
+  exit 1
+}
+
+for i in *.wav; do lame -b 320 -h "${i}" "${i%.wav}.mp3"; done

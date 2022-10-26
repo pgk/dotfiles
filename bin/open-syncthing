@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+	xdg-open 'http://127.0.0.1:8384/'
+elif [[ "$OSTYPE" == "darwin"* ]]; then
+	open 'http://127.0.0.1:8384/'
+else
+	echo 'exiting, unsupported operating system.'
+fi
+

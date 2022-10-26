@@ -1,0 +1,50 @@
+[core]
+	autocrlf = input
+	excludesfile = ~/.gitignore_global
+
+[push]
+	default = upstream
+
+[alias]
+	co = checkout
+	cm = commit
+	cma = commit --amend --no-edit
+	br = branch
+	pr = pull --rebase
+	pl = pull
+	st = status
+	fp = fetch --prune
+	lrem = remote --verbose
+	last = 'cat-file commit HEAD'
+	diffc = diff --cached
+	unstage = reset HEAD --
+	all = add . --all
+	amend = !git log -n 1 --pretty=tformat:%s%n%n%b | git commit -F - --amend
+	lg = log --pretty=format:\"%C(yellow bold)%H%C(black) - %an,  : %s\"
+	ps = push
+	psf = push --force-with-lease
+
+[color]
+	ui = true
+
+[color "branch"]
+	current = yellow
+	local = green
+	remote = cyan
+
+[color "diff"]
+	meta = yellow
+	frag = magenta
+	old = red
+	new = green
+	whitespace = red reverse
+
+[color "status"]
+	added = green
+	changed = yellow
+	untracked = red
+
+[log]
+	decorate = full
+[init]
+	defaultBranch = trunk

@@ -1,0 +1,21 @@
+#!/usr/bin/env sh
+if ! tmux has-session -t site; then
+  tmux new -s site -d
+  tmux rename-window -t site:1 site-dev
+  tmux split-window -t site:1 -h
+  tmux send-keys -t site:1.0 'cd ~/dev/kountanis.com' Enter
+  tmux send-keys -t site:1.0 'nvim' Enter
+  tmux send-keys -t site:1.1 'cd ~/dev/kountanis.com' Enter
+  tmux send-keys -t site:1.1 'make dev' Enter
+
+  tmux new-window -t site:2
+  tmux rename-window -t site:2 site-deploy
+  tmux send-keys -t site:2 'cd ~/dev/pgk_infrastructure' Enter
+  tmux split-window -t site:2 -h
+
+  tmux send-keys -t site:2.0 'cd ~/dev/pgk_infrastructure' Enter
+  tmux send-keys -t site:2.0 'vim' Enter
+  tmux send-keys -t site:2.1 'cd ~/dev/pgk_infrastructure' Enter
+  tmux resize-pane -t site:2 -R 20
+fi
+tmux attach -t site

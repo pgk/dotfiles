@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+
+name="$1"||'a_function'
+
+cat <<EOF
+/**
+ * ${name}: A function that does things.
+ *
+ * @return mixed
+ **/
+function ${name}(/* args */) {
+	// body
+}
+EOF
+

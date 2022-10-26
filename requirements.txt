@@ -1,0 +1,9 @@
+selenium
+requests
+python-dotenv
+paramiko
+beautifulsoup4
+Jinja2
+openai
+numpy
+pandas
