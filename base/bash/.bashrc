@@ -263,7 +263,7 @@ export NVM_DIR="$HOME/.nvm"
 #   export DOCKER_HOST=tcp://docker.local:2375
 # }
 
-if [ -d "$HOME/.phpdev/bin" ]; then
+if [ -d "$HOME/.phpenv/bin" ]; then
     # add phpdev
     export PATH="$HOME/.phpenv/bin:$PATH"
     eval "$(phpenv init -)"
