@@ -266,4 +266,5 @@ export NVM_DIR="$HOME/.nvm"
 if [ -d "$HOME/.phpdev/bin" ]; then
     # add phpdev
     export PATH="$HOME/.phpenv/bin:$PATH"
+    eval "$(phpenv init -)"
 fi
