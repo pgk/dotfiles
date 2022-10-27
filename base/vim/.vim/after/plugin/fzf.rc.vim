@@ -31,10 +31,10 @@ if has('nvim') && !exists('g:loaded_cmp')
 endif
 
 if executable('rg')
-  nnoremap <Leader>a :Rg<cr>
+  nnoremap <silent><Leader>a :Rg<cr>
   nnoremap <silent><leader>aa :Rg <C-R><C-W><CR>
 elseif executable('ag')
-  nnoremap <Leader>a :Ag<cr>
+  nnoremap <silent><Leader>a :Ag<cr>
   nnoremap <silent><leader>aa :Ag <C-R><C-W><CR>
 endif
 

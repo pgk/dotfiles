@@ -98,7 +98,7 @@ Plug 'altercation/vim-colors-solarized'
 if has('nvim')
   Plug 'nvim-lualine/lualine.nvim'
   Plug 'akinsho/bufferline.nvim'
-  " If you want to have icons in your statusline choose one of these
+  " Fancy icons.
   Plug 'kyazdani42/nvim-web-devicons'
 else
   Plug 'vim-airline/vim-airline'
@@ -107,13 +107,12 @@ endif
 
 Plug 'gioele/vim-autoswap'
 Plug 'vim-scripts/dbext.vim'
-Plug 'NlGHT/vim-eel'
 Plug 'jiangmiao/auto-pairs'
 
 " Bookmarks
 " Plug 'MattesGroeger/vim-bookmarks'
 
-" this works badly
+" ctags
 if executable('ctags') && empty($VIM_SIMPLE)
   " Plug 'ludovicchabant/vim-gutentags'
 endif
@@ -129,7 +128,7 @@ if has('nvim')
 endif
 
 if has('nvim') && has('nvim-0.6') && empty($VIM_SIMPLE)
-  Plug 'rcarriga/nvim-notify'
+  " Plug 'rcarriga/nvim-notify'
   Plug 'neovim/nvim-lspconfig'
   Plug 'onsails/lspkind-nvim'
   Plug 'hrsh7th/cmp-nvim-lsp'
@@ -137,7 +136,7 @@ if has('nvim') && has('nvim-0.6') && empty($VIM_SIMPLE)
   Plug 'hrsh7th/cmp-path'
   Plug 'hrsh7th/cmp-cmdline'
   Plug 'hrsh7th/nvim-cmp'
-  Plug 'glepnir/lspsaga.nvim'
+  " Plug 'glepnir/lspsaga.nvim'
 
   if has('python3')
     Plug 'quangnguyen30192/cmp-nvim-ultisnips'
@@ -360,6 +359,7 @@ command! Evimrc :e ~/.vimrc
 
 command! Clight call SetLightColour()
 command! Cdark call SetDarkColour()
+command! -nargs=0 Scb call Newscratch()
 
 if !exists('g:loaded_telescope') && !exists('g:loaded_fzf_vim')
   nnoremap <Leader>a :grep<cr>

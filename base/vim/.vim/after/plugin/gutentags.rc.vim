@@ -3,7 +3,7 @@ if !exists('g:loaded_gutentags')
 endif
 
 " Gutentags setup
-let g:gutentags_project_root = ['wp-content', '.phab', '.git', '.hg', '.svn']
+let g:gutentags_project_root = ['wp-content', '.phab', '.git', '.hg', '.svn', '.fslckout', '_FOSSIL_']
 let g:gutentags_cache_dir = '~/.vim/gutentags'
 let g:gutentags_ctags_exclude = ['*.xml',
                               \ '*.phar', '*dist/*',
