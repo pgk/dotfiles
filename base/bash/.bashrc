@@ -262,3 +262,8 @@ export NVM_DIR="$HOME/.nvm"
 # [ -d "$HOME/dev/vagrant-docker-engine" ] && {
 #   export DOCKER_HOST=tcp://docker.local:2375
 # }
+
+if [ -d "$HOME/.phpdev/bin" ]; then
+    # add phpdev
+    export PATH="$HOME/.phpenv/bin:$PATH"
+fi
