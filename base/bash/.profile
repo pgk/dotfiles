@@ -1,5 +1,5 @@
 if [ -d "$HOME/.local/bin" ]; then
-  export PATH="$PATH:$HOME/.local/bin";
+  export PATH="$HOME/.local/bin:$PATH";
 fi
 
 if [ -d "$HOME/common/bin" ]; then
@@ -7,7 +7,7 @@ if [ -d "$HOME/common/bin" ]; then
 fi
 
 if [ -d "$HOME/bin" ]; then
-  export PATH="$PATH:$HOME/bin";
+  export PATH="$HOME/bin:$PATH";
 fi
 
 if [ -d "$HOME/dev/go" ]; then
@@ -16,10 +16,10 @@ else
   export GOPATH="$HOME/go"
 fi
 
-export PATH="$PATH:$GOPATH/bin"
+export PATH="$GOPATH/bin:$PATH"
 
 export PATH="$HOME/.cargo/bin:$PATH"
-export PATH="$PATH:$HOME/dotfiles/bin"
+export PATH="$HOME/dotfiles/bin:$PATH"
 
 if [ -d "/usr/local/lib/ruby/gems/2.6.0/bin" ]; then
   export PATH="$PATH:/usr/local/lib/ruby/gems/2.6.0/bin"
