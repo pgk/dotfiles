@@ -90,6 +90,7 @@ Plug 'stanangeloff/php.vim'
 Plug 'glench/vim-jinja2-syntax'
 Plug 'leafOfTree/vim-svelte-plugin'
 Plug 'mattn/emmet-vim'
+Plug 'vim-scripts/forth.vim'
 
 Plug 'tomasr/molokai'
 Plug 'altercation/vim-colors-solarized'
