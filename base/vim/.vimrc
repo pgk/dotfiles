@@ -90,28 +90,24 @@ Plug 'stanangeloff/php.vim'
 Plug 'glench/vim-jinja2-syntax'
 Plug 'leafOfTree/vim-svelte-plugin'
 Plug 'mattn/emmet-vim'
-Plug 'vim-scripts/forth.vim'
 
 Plug 'tomasr/molokai'
 Plug 'altercation/vim-colors-solarized'
 
 " Plug 'mhinz/vim-startify'
 if has('nvim')
-  Plug 'nvim-lualine/lualine.nvim'
-  Plug 'akinsho/bufferline.nvim'
+  " Plug 'nvim-lualine/lualine.nvim'
+  " Plug 'akinsho/bufferline.nvim'
   " Fancy icons.
-  Plug 'kyazdani42/nvim-web-devicons'
+  " Plug 'kyazdani42/nvim-web-devicons'
 else
-  Plug 'vim-airline/vim-airline'
-  Plug 'vim-airline/vim-airline-themes'
+  " Plug 'vim-airline/vim-airline'
+  " Plug 'vim-airline/vim-airline-themes'
 endif
 
 Plug 'gioele/vim-autoswap'
 Plug 'vim-scripts/dbext.vim'
 Plug 'jiangmiao/auto-pairs'
-
-" Bookmarks
-" Plug 'MattesGroeger/vim-bookmarks'
 
 " ctags
 if executable('ctags') && empty($VIM_SIMPLE)
@@ -175,17 +171,17 @@ if has("nvim") && $COLORTERM =~? 'truecolor'
 endif
 
 let g:solarized_termcolors=256
-set background=dark
+" set background=dark
 " set background=light
-if has('nvim')
-  " colorscheme solarized
-  colorscheme tokyonight
-  " colorscheme peachpuff
-else
-  colorscheme solarized
-  " colorscheme molokai
-  " colorscheme peachpuff
-endif
+" if has('nvim')
+"   " colorscheme solarized
+"   " colorscheme tokyonight
+"   " colorscheme peachpuff
+" else
+"   " colorscheme solarized
+"   " colorscheme peachpuff
+" endif
+colorscheme molokai
 
 function! SetLightColour()
   set background=light
@@ -196,8 +192,8 @@ endfunction
 function! SetDarkColour()
   set background=dark
   execute 'set background=dark'
-  " execute 'colorscheme molokai'
-  execute 'colorscheme tokyonight'
+  execute 'colorscheme molokai'
+  " execute 'colorscheme tokyonight'
 endfunction
 
 set path+=** " Provides tab-completion for all file-related tasks

@@ -1,6 +1,6 @@
 if !has('nvim') | finish | endif
 
-lua << EOF
-require("bufferline").setup{}
-EOF
+" lua << EOF
+" require("bufferline").setup{}
+" EOF
 
