@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+
+
+
+gitdiff() {
+	preview="git diff "$@" --color=always -- {-1}"
+	# echo $preview
+	git diff "$@" --name-only | fzf -m --ansi --preview "$preview"
+}
+
+default_fn() {
+	fzf --preview 'bat {-1} --color=always'
+}
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -r|--repo)
+      REPO="$2"
+      shift # past argument
+      shift # past value
+      ;;
+    -b|--branch)
+      BRANCH="$2"
+      shift # past argument
+      shift # past value
+      ;;
+    -h|--help)
+      SHOW_USAGE="yes"
+      shift # past argument
+      ;;
+    -*|--*)
+      echo "Unknown option $1"
+      exit 1
+      ;;
+    *)
+      POSITIONAL_ARGS+=("$1") # save positional arg
+      shift # past argument
+      ;;
+  esac
+done
+
+set -- "${POSITIONAL_ARGS[@]}" # restore positional parameters
+
+command="$1"
+
+echo $command
+
+
+  case $command in
+    diff)
+	    gitdiff "$2"
+    ;;
+    *)
+	default_fn
+	exit 1
+      ;;
+  esac
