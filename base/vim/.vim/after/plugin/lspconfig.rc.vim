@@ -47,22 +47,18 @@ local on_attach = function(client, bufnr)
   buf_set_keymap('n', ']d', '<cmd>lua vim.diagnostic.goto_next()<CR>', opts)
   buf_set_keymap('n', '<leader>gl', '<cmd>lua vim.diagnostic.setloclist()<CR>', opts)
   buf_set_keymap('n', '<leader>bf', '<cmd>lua vim.lsp.buf.formatting()<CR>', opts)
-  buf_set_keymap('n', '<leader>fs', '<cmd>lua require"telescope.builtin".lsp_document_symbols{}<CR>', opts)
-  buf_set_keymap('n', '<leader>fd', '<cmd>lua require"telescope.builtin".lsp_definitions{}<CR>', opts)
-  buf_set_keymap('n', '<leader>fgi', '<cmd>lua require"telescope.builtin".lsp_implementations{}<CR>', opts)
-  buf_set_keymap('n', '<leader>fgi', '<cmd>lua require"telescope.builtin".lsp_code_actions{}<CR>', opts)
 
   -- formatting
   if client.name == 'tsserver' then
     client.resolved_capabilities.document_formatting = false
   end
 
-  if client.resolved_capabilities.document_formatting then
-    vim.api.nvim_command [[augroup Format]]
-    vim.api.nvim_command [[autocmd! * <buffer>]]
-    vim.api.nvim_command [[autocmd BufWritePre <buffer> lua vim.lsp.buf.formatting_seq_sync()]]
-    vim.api.nvim_command [[augroup END]]
-  end
+--  if client.resolved_capabilities.document_formatting then
+--    vim.api.nvim_command [[augroup Format]]
+--    vim.api.nvim_command [[autocmd! * <buffer>]]
+--    vim.api.nvim_command [[autocmd BufWritePre <buffer> lua vim.lsp.buf.formatting_seq_sync()]]
+--    vim.api.nvim_command [[augroup END]]
+--  end
 
   protocol.SymbolKind = { }
   protocol.CompletionItemKind = {
