@@ -1,5 +1,5 @@
 if !exists('g:loaded_cmp') | finish | endif
-
+finish
 set completeopt=menuone,noinsert,noselect
 
 lua <<EOF

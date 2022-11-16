@@ -53,12 +53,12 @@ local on_attach = function(client, bufnr)
     client.resolved_capabilities.document_formatting = false
   end
 
---  if client.resolved_capabilities.document_formatting then
---    vim.api.nvim_command [[augroup Format]]
---    vim.api.nvim_command [[autocmd! * <buffer>]]
---    vim.api.nvim_command [[autocmd BufWritePre <buffer> lua vim.lsp.buf.formatting_seq_sync()]]
---    vim.api.nvim_command [[augroup END]]
---  end
+  if cliend.name == 'gopls' and client.resolved_capabilities.document_formatting then
+    vim.api.nvim_command [[augroup Format]]
+    vim.api.nvim_command [[autocmd! * <buffer>]]
+    vim.api.nvim_command [[autocmd BufWritePre <buffer> lua vim.lsp.buf.formatting_seq_sync()]]
+    vim.api.nvim_command [[augroup END]]
+  end
 
   protocol.SymbolKind = { }
   protocol.CompletionItemKind = {
