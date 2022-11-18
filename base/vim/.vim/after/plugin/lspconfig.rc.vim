@@ -50,10 +50,13 @@ local on_attach = function(client, bufnr)
 
   -- formatting
   if client.name == 'tsserver' then
-    client.resolved_capabilities.document_formatting = false
+    client.server_capabilities.document_formatting = false
+  end
+  if client.name == 'intelephense' then
+    client.server_capabilities.document_formatting = false
   end
 
-  if client.name == 'gopls' and client.resolved_capabilities.document_formatting then
+  if client.name == 'gopls' and client.server_capabilities.document_formatting then
     vim.api.nvim_command [[augroup Format]]
     vim.api.nvim_command [[autocmd! * <buffer>]]
     vim.api.nvim_command [[autocmd BufWritePre <buffer> lua vim.lsp.buf.formatting_seq_sync()]]
@@ -148,15 +151,15 @@ end
 --on_attach = on_attach
 --}
 if vim.fn['executable']('phpctor') then
-nvim_lsp.phpactor.setup{
-  on_attach = on_attach,
-  filetypes = { "php" },
-  root_dir = root_pat({ "composer.json", ".git", "wp-content", "vendor" }),
-  capabilities = capabilities,
-}
+-- nvim_lsp.phpactor.setup{
+--   on_attach = on_attach,
+--   filetypes = { "php" },
+--   root_dir = root_pat({ "composer.json", ".git", "wp-content", "vendor" }),
+--   capabilities = capabilities,
+-- }
 end
 
-if vim.fn['executable']('nointelephense') > 0 then
+if vim.fn['executable']('intelephense') > 0 then
 nvim_lsp.intelephense.setup({
     root_dir = root_pat({ "composer.json", ".git", "wp-content", "vendor" }), filetypes = { "php" },
     settings = {
