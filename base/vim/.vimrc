@@ -118,6 +118,7 @@ if has('python3') && empty($VIM_SIMPLE)
   " Plug 'vim-vdebug/vdebug'
   Plug 'SirVer/ultisnips'
   Plug 'honza/vim-snippets'
+  Plug 'vim-vdebug/vdebug'
 endif
 
 if has('nvim')
@@ -354,6 +355,8 @@ command! Ctgen !ctags -R --exclude=.git --exclude=node_modules --exclude=vendor 
 
 command! Rlvimrc :source ~/.vimrc
 command! Evimrc :e ~/.vimrc
+command! Ecommonplace :e ~/Sync/docs/wikis/commonplace.txt
+command! Rcommonplace :!python3 ~/Sync/docs/wikis/render_commonplace.py ~/Sync/docs/wikis/commonplace.txt
 
 command! Clight call SetLightColour()
 command! Cdark call SetDarkColour()
