@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# coding: utf-8
+
+set -e
+
+command -v docker > /dev/null 2>&1 || {
+  exit 0
+}
+
+CODE_DIR="$(pwd)"
+
+docker run -v "$CODE_DIR":/scripts/  --workdir /scripts/ pgk/phpcs-wordpress phpcs --standard=WordPress-Core "$@"
