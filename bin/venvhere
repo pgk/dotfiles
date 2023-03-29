@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+
+set -e
+
+command -v python3 || {
+	echo 'you need python3 to create a venv'
+	exit 1
+}
+
+[ -d "$(pwd)/env" ] || {
+	python3 -m venv env
+}
+
+[ -f env/bin/activate ] && {
+	source env/bin/activate
+}
+

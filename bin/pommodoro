@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+import sys
+from subprocess import run
+import threading
+import time
+import tkinter as tk
+from tkinter import ttk
+# you need to install:
+# brew install python-tk
+
+thd = None
+started = False
+
+root = tk.Tk()
+root.title('Dactiv')
+frm = ttk.Frame(root, padding=10)
+frm.grid()
+
+label = ttk.Label(frm, text="Break")
+
+label.grid(column=0, row=0)
+
+def on_done_event(evt):
+    label.config(text='Break')
+    start_button.config(state='Pommodoro')
+
+
+def on_click():
+    global started
+    global thd
+    
+    if started:
+        started = False
+        thd.stop()
+        on_done_event(None)
+    else:
+        started = True
+        label.config(text='Started: 00:00')
+        start_button.config(state='Stop')
+        thd = threading.Thread(target=run_pomodoro)   # timer thread
+        thd.daemon = True
+        thd.start()  # start timer loop
+
+# runs in separate thread
+def run_pomodoro(t=1):
+    entry_txt = entry.get()
+    try:
+        t = int(entry_txt)
+    except:
+        t = 25
+
+    print('Timer for {} minutes started!'.format(t),threading.get_ident())
+    time_interval = 60 * t
+    elapsed = time_interval
+    current_timestamp = time.time()
+    end_timestamp = current_timestamp + time_interval
+
+    while time.time() < end_timestamp:
+        print('Elapsed: {}'.format(elapsed))
+        time.sleep(1)
+        root.event_generate("<<pommodoro-progress>>", when="tail", state=elapsed)
+        elapsed = int(end_timestamp - time.time())
+    # time.sleep(t*60)
+    run(['terminal-notifier', '-message', "'Pommodoro finihed!'", '-sound', 'default'])
+    root.event_generate("<<pommodoro-done>>", when="tail", state=True)
+    return True
+
+entry = tk.Entry(width=20)
+entry.grid(column=1,row=1)
+
+start_button = ttk.Button(frm, text="Pommodoro", command=on_click)
+start_button.grid(column=0, row=2)
+ttk.Button(frm, text="Quit", command=root.destroy).grid(column=1, row=2)
+
+def on_pomodo_progress(evt):
+    elapsed = evt.state
+    secs = elapsed % 60
+    mins = elapsed // 60
+    # format a number to 2 digits
+    label.config(text='Started: {:02d}:{:02d}'.format(mins, secs))
+
+root.bind("<<pommodoro-done>>", on_done_event)
+root.bind("<<pommodoro-progress>>", on_pomodo_progress)
+root.mainloop()

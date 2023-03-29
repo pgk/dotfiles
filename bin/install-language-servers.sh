@@ -13,6 +13,6 @@ command -v go && {
   go install golang.org/x/tools/gopls@latest
 }
 
-command -v composer >/dev/null && {
-  composer global require -W php-stubs/wordpress-globals php-stubs/wordpress-stubs php-stubs/woocommerce-stubs php-stubs/acf-pro-stubs wpsyntex/polylang-stubs php-stubs/genesis-stubs php-stubs/wp-cli-stubs
-}
+# command -v composer >/dev/null && {
+#   composer global require -W php-stubs/wordpress-globals php-stubs/wordpress-stubs php-stubs/woocommerce-stubs php-stubs/acf-pro-stubs wpsyntex/polylang-stubs php-stubs/genesis-stubs php-stubs/wp-cli-stubs
+# }
