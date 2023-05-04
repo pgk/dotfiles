@@ -268,3 +268,10 @@ if [ -d "$HOME/.phpenv/bin" ]; then
     export PATH="$HOME/.phpenv/bin:$PATH"
     eval "$(phpenv init -)"
 fi
+
+if [[ "$OSTYPE" == "darwin"* ]] && [[ -d "$HOME/Library/pnpm" ]]; then
+	# pnpm
+	export PNPM_HOME="$HOME/Library/pnpm"
+	export PATH="$PNPM_HOME:$PATH"
+	# pnpm end
+fi
