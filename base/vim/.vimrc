@@ -322,6 +322,7 @@ nmap Ι I
 nmap Ο O
 nmap π p
 nmap Π P
+nmap ΅ W
 
 nmap α a
 nmap Α A
@@ -333,12 +334,20 @@ nmap γγ gg
 nmap Γ G
 nmap δδ dd
 nmap φ f
+nmap Φ F
 nmap γ g
+nmap ς w
+nmap ¨ :
+nmap ΄ ;
 
 nmap η h
 nmap ξ j
 nmap κ k
 nmap λ l
+vmap η h
+vmap ξ j
+vmap κ k
+vmap λ l
 
 nmap ζ z
 nmap χ x
