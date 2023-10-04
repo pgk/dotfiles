@@ -34,8 +34,8 @@ elif [ "$1" == 'light' ]; then
   cat "$PLUGIN_DIR/themes/solarized-light.yml" > "$PLUGIN_DIR/themes/current.yml"
 cat << EOF > ~/.vim-default-colors.vim
 let g:solarized_termcolors=256
+colo seoul256
 set background=light
-colorscheme solarized
 EOF
 fi
 

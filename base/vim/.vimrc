@@ -94,6 +94,10 @@ Plug 'mattn/emmet-vim'
 Plug 'tomasr/molokai'
 Plug 'altercation/vim-colors-solarized'
 
+Plug 'junegunn/goyo.vim'
+Plug 'junegunn/limelight.vim'
+Plug 'junegunn/seoul256.vim'
+
 " Plug 'mhinz/vim-startify'
 if has('nvim')
   " Plug 'nvim-lualine/lualine.nvim'
@@ -188,7 +192,7 @@ colorscheme molokai
 function! SetLightColour()
   set background=light
   execute 'set background=light'
-  execute 'colorscheme solarized'
+  execute 'colo seoul256'
 endfunction
 
 function! SetDarkColour()
