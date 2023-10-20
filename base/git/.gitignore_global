@@ -16,3 +16,4 @@ cscope.in.out
 cscope.po.out
 .lvimrc.vim
 .vim-bookmarks
+.DS_Store
