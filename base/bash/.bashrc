@@ -275,3 +275,7 @@ if [[ "$OSTYPE" == "darwin"* ]] && [[ -d "$HOME/Library/pnpm" ]]; then
 	export PATH="$PNPM_HOME:$PATH"
 	# pnpm end
 fi
+
+[ -d "$HOME/.cargo/env" ] && {
+	. "$HOME/.cargo/env"
+}
