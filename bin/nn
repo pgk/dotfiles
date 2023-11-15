@@ -1,0 +1,151 @@
+#!/usr/bin/env python3
+
+# short for new note.
+
+import os
+from os.path import exists
+from os.path import basename
+import datetime
+import sys
+import fileinput
+import select
+import argparse
+import re
+import shlex
+import subprocess
+
+
+WIKILINK_REGEX_NAMED = r"(?<!!)(?P<transclusion>!?)\[\[(?P<link_href>[^|]+?)(\|(?P<link_name>[\s\S]+?))?]]"
+WIKILINK_REGEX_STR = r"(?<!!)(!?)\[\[([^|]+?)(\|([\s\S]+?))?]]"
+# WIKILINK_REGEX = re.compile(WIKILINK_REGEX_STR) # gm
+WIKILINK_REGEX = re.compile(WIKILINK_REGEX_NAMED) # gm
+
+DECIMAL_PATTERN = re.compile(r'&#(\d+);')
+HEX_PATTERN = re.compile(r'&#x([\da-fA-F]+);')
+QUOTE_PATTERN = re.compile(r'[\']+')
+DISALLOWED_CHARS_PATTERN = re.compile(r'[^-a-zA-Z0-9]+')
+DISALLOWED_UNICODE_CHARS_PATTERN = re.compile(r'[\W_]+')
+DUPLICATE_DASH_PATTERN = re.compile(r'-{2,}')
+NUMBERS_PATTERN = re.compile(r'(?<=\d),(?=\d)')
+DEFAULT_SEPARATOR = '-'
+
+
+def slugify(text):
+    # ensure text is unicode
+    if not isinstance(text, str):
+        text = str(text, 'utf-8', 'ignore')
+    text = text.lower()
+    text = QUOTE_PATTERN.sub('', text)
+    pattern = DISALLOWED_CHARS_PATTERN
+    text = re.sub(pattern, DEFAULT_SEPARATOR, text)
+    text = DUPLICATE_DASH_PATTERN.sub(DEFAULT_SEPARATOR, text).strip(DEFAULT_SEPARATOR)
+    return text
+
+
+def newnote(title, prepend_id=True, dry_run=False, day_note=False):
+    now = datetime.datetime.now()
+    date_created = str(now.date())
+    zettelid = ''
+    sep = ''
+
+    if len(title) > 0:
+        sep = ' '
+
+    if prepend_id:
+        zettelid = now.strftime("%Y%m%d%H%M%S") + sep
+
+    title = f"{zettelid}{title}"
+    slug = slugify(title)
+    filename = f"{slug}.md"
+
+    txt = f'''---
+title: '{title}'
+description: ''
+date: {date_created}
+visibility: private
+status: draft
+tags:
+  - Notes
+---
+# {title}
+'''
+
+    if dry_run:
+        print('filename', filename)
+        print(txt)
+        return
+    if exists(filename):
+        # let's output the filename for editing.
+        print(filename, end="")
+        return
+    with open(filename, 'w') as f:
+        f.write(txt)
+        print(filename, end="")
+
+
+def titleize(argv, have_stdin=False):
+    title = ''
+    if len(argv) > 0:
+        title = ' '.join([a.title() for a in argv])
+    elif have_stdin:
+        title = sys.stdin.read().title()
+    return title
+
+if __name__ == '__main__':
+    have_stdin = select.select([sys.stdin, ], [], [], 0.0)[0]
+    permitted_actions = ['new',  'slugify', 'follow', 'excise', 'daily']
+
+    parser = argparse.ArgumentParser(description='Note-taking utilities')
+    parser.add_argument('action', type=str, help='action to do', choices=permitted_actions)
+    parser.add_argument("-p", "--plain", default=False, help="Do not prepend a timestamp.", action='store_true')
+    parser.add_argument("--daily", default=False, help="Make a day note, like 1984-01-01.md", action='store_true')
+    parser.add_argument("-d", "--dry-run", default=False, help="Just print out the result.", action='store_true')
+    parser.add_argument('args', nargs='*', default=[])
+
+    args = parser.parse_args()
+
+    # if site_root[0] == '~':
+    #     site_root = os.path.expanduser(site_root)
+
+    if args.action == 'new':
+        # print(args)
+        argv = args.args
+        title = titleize(argv, have_stdin)
+        prepend_id = args.plain == False
+        day_note = args.daily
+        newnote(title, prepend_id=prepend_id, dry_run=args.dry_run)
+        exit(0)
+    if args.action == 'daily':
+        now = datetime.datetime.now()
+        date_today = now.strftime('%Y-%m-%d Notes')
+        title = date_today
+        prepend_id = False
+        day_note = True
+        newnote(title, prepend_id=False, dry_run=args.dry_run)
+        exit(0)
+    elif args.action == 'follow':
+        # print(args)
+        links = WIKILINK_REGEX.findall(''.join(args.args))
+        # print(links)
+        if len(links) == 0:
+            exit(0)
+        link = links[0]
+        slug = slugify(link[1])
+        cmd = f"ls . | grep '^{slug}.md'"
+        # print(cmd)
+        r = mycmd=subprocess.getoutput(cmd)
+        if len(r) > 0:
+            print(r, end="")
+            exit(0)
+
+        # expand the search, so we hit fuzzy results.
+        cmd = f"ls . | grep '^{slug}'"
+        exit(0)
+    elif args.action == 'slugify':
+        argv = args.args
+        title = titleize(argv, have_stdin)
+        print(slugify(title), end="")
+    else:
+        print('invalid action')
+        exit(1)
+
