@@ -6,6 +6,15 @@ if !exists('g:loaded_fzf_vim')
   finish
 endif
 
+" Add shortcut for echoing result back to current buffer.
+let g:fzf_action = {
+  \ 'ctrl-t': 'tab split',
+  \ 'ctrl-x': 'split',
+  \ 'ctrl-v': 'vsplit',
+  \ 'ctrl-o': ':r !echo',
+  \ 'ctrl-q': 'fill_quickfix',
+  \ 'ctrl-y': {lines -> setreg('*', join(lines, "\n"))}}
+
 " Set ag for ack.vim and fzf
 if executable('ag')
   let g:ackprg = 'ag --vimgrep'
