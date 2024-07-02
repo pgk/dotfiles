@@ -1,3 +1,8 @@
+
+if !has('nvim')
+  finish
+endif
+
 lua <<EOF
 require('gpt').setup({
       api_key = os.getenv("OPENAI_API_KEY")
