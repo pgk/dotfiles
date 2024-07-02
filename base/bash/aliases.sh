@@ -94,12 +94,13 @@ alias vi=vim
 alias v=vim
 alias g=git
 alias uniwatch='unison -ui text -repeat watch'
-alias wpcom='tms ~/dev/wpcom_sandbox/wpcom/public_html wpcom'
-alias idb='tms ~/dev/intensedebate_svn/idweb intense-debate'
-alias jp='tms ~/dev/jetpack jp'
-alias vpp='tms ~/dev/videopress_dev/videopress videopress-player'
-alias vptv='tms ~/dev/videopress-hq videopress-tv'
-alias cwpcom='cd ~/dev/wpcom_sandbox/wpcom/public_html'
-alias grav='tms ~/dev/gravatar_sandbox/public_html gravatar'
 alias ωιμ='vim'
 
+if [ -d "$HOME/dotfiles/plugins" ]; then
+for dir in "$HOME/dotfiles/plugins"/*/; do
+    # find "$dir" >"$dir/original_filenames.txt"
+    if [ -f "$dir/bash/aliases.sh" ]; then
+      source "$dir/bash/aliases.sh";
+    fi
+done
+fi

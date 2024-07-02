@@ -279,3 +279,20 @@ fi
 [ -d "$HOME/.cargo/env" ] && {
 	. "$HOME/.cargo/env"
 }
+
+# emscripten
+[ -d "$HOME/dev/emsdk" ] && {
+	export PATH="$HOME/dev/emsdk:$PATH"
+}
+
+# emscripten too
+[ -d "$HOME/dev/emsdk/upstream/emscripten" ] && {
+	export PATH="$HOME/dev/emsdk/upstream/emscripten:$PATH"
+}
+
+
+# CDP
+[ -d "$HOME/cdpr8/_cdp/_cdprogs" ] && {
+	export PATH="$HOME/cdpr8/_cdp/_cdprogs:$PATH"
+}
+
