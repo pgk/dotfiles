@@ -139,7 +139,7 @@ if has('nvim') && has('nvim-0.6') && empty($VIM_SIMPLE)
   Plug 'hrsh7th/cmp-cmdline'
   Plug 'hrsh7th/nvim-cmp'
   " Plug 'glepnir/lspsaga.nvim'
-  " Plug 'github/copilot.vim'
+  Plug 'github/copilot.vim'
   Plug 'thmsmlr/gpt.nvim'
 
   if has('python3')
