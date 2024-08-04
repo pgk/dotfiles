@@ -15,7 +15,7 @@ set -e
 # }
 
 
-brew install reattach-to-user-namespace
-brew install virtualbox audacity adium osxfuse vagrant vlc xquartz --cask
+brew install reattach-to-user-namespace abcde cd-discid
+brew install virtualbox audacity adium osxfuse vagrant vlc xquartz alacritty --cask
 
 

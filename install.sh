@@ -74,6 +74,7 @@ bash "$DOTFILE_FOLDER/base/tmux/install.sh"
 bash "$DOTFILE_FOLDER/base/ctags/install.sh"
 bash "$DOTFILE_FOLDER/base/vim/install.sh"
 bash "$DOTFILE_FOLDER/base/alacritty/install.sh"
+bash "$DOTFILE_FOLDER/base/abcde/install.sh"
 # bash "$DOTFILE_FOLDER/base/unison/install.sh"
 
 cd "$DOTFILE_FOLDER"
