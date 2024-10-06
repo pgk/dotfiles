@@ -5,6 +5,7 @@ endif
 
 lua <<EOF
 require'nvim-treesitter.configs'.setup {
+  ensure_installed = "all",
   textobjects = {
     select = {
       enable = true,

@@ -15,7 +15,7 @@ set -e
 # }
 
 
-brew install reattach-to-user-namespace abcde cd-discid
+brew install reattach-to-user-namespace abcde cd-discid fd ripgrep
 brew install virtualbox audacity adium osxfuse vagrant vlc xquartz alacritty --cask
 
 

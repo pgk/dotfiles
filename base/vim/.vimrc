@@ -130,7 +130,10 @@ if has('nvim')
 endif
 
 if has('nvim') && has('nvim-0.6') && empty($VIM_SIMPLE)
-  " Plug 'rcarriga/nvim-notify'
+  Plug 'nvim-lua/plenary.nvim'
+  Plug 'stevearc/dressing.nvim'
+
+  Plug 'rcarriga/nvim-notify'
   Plug 'neovim/nvim-lspconfig'
   Plug 'onsails/lspkind-nvim'
   Plug 'hrsh7th/cmp-nvim-lsp'
@@ -140,6 +143,7 @@ if has('nvim') && has('nvim-0.6') && empty($VIM_SIMPLE)
   Plug 'hrsh7th/nvim-cmp'
   " Plug 'glepnir/lspsaga.nvim'
   Plug 'github/copilot.vim'
+  Plug 'olimorris/codecompanion.nvim'
 
   if has('python3')
     Plug 'quangnguyen30192/cmp-nvim-ultisnips'
@@ -153,8 +157,7 @@ if has('nvim') && has('nvim-0.6') && empty($VIM_SIMPLE)
   Plug 'nvim-treesitter/nvim-treesitter', {'do': ':TSUpdate'}  " We recommend updating the parsers on update
   Plug 'nvim-treesitter/nvim-treesitter-textobjects'
 
-  " Plug 'nvim-lua/plenary.nvim'
-  " Plug 'nvim-telescope/telescope.nvim'
+  Plug 'nvim-telescope/telescope.nvim'
   " Plug 'nvim-telescope/telescope-fzy-native.nvim'
 
   " Debugging Plugins
@@ -162,10 +165,10 @@ if has('nvim') && has('nvim-0.6') && empty($VIM_SIMPLE)
   Plug 'Pocco81/DAPInstall.nvim'
 endif
 
-if version >= 704
-  Plug 'junegunn/fzf', { 'dir': '~/.fzf', 'do': './install --bin' }
-  Plug 'junegunn/fzf.vim'
-endif
+" if !has('nvim') && version >= 704
+"   Plug 'junegunn/fzf', { 'dir': '~/.fzf', 'do': './install --bin' }
+"   Plug 'junegunn/fzf.vim'
+" endif
 
 call plug#end()
 
@@ -375,7 +378,7 @@ command! Clight call SetLightColour()
 command! Cdark call SetDarkColour()
 command! -nargs=0 Scb call Newscratch()
 
-if !exists('g:loaded_telescope') && !exists('g:loaded_fzf_vim')
+if !exists('g:loaded_telescope') || !exists('g:loaded_fzf_vim')
   nnoremap <Leader>a :grep<cr>
   nnoremap <silent><Leader>aa :grep <cword> *<CR>
 endif

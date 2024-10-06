@@ -3,6 +3,8 @@ if !exists('g:loaded_copilot') | finish | endif
 let g:copilot_filetypes = {
       \ '*': v:false,
       \ 'php': v:true,
+      \ 'go': v:true,
+      \ 'python': v:true,
       \ 'javascript': v:true,
       \ 'typescript': v:true,
       \ 'html': v:true,
