@@ -4,27 +4,27 @@
 
 # If not running interactively, don't do anything
 case $- in
-    *i*) ;;
-      *) return;;
+*i*) ;;
+*) return ;;
 esac
 
 # source ~/.bashrc.before.sh if exists.
 if [ -f ~/.bashrc.before.sh ]; then
-    . ~/.bashrc.before.sh
+  . ~/.bashrc.before.sh
 fi
 
 unameres="$(uname -s)"
 case "${unameres}" in
-    Linux*)     MYOS=linux;;
-    Darwin*)    MYOS=darwin;;
-    CYGWIN*)    MYOS=cygwin;;
-    MINGW*)     MYOS=mingw;;
-    *)          MYOS="unknown:${unameres}"
+Linux*) MYOS=linux ;;
+Darwin*) MYOS=darwin ;;
+CYGWIN*) MYOS=cygwin ;;
+MINGW*) MYOS=mingw ;;
+*) MYOS="unknown:${unameres}" ;;
 esac
 
 # source globals
 if [ -f /etc/bashrc ]; then
-    . /etc/bashrc
+  . /etc/bashrc
 fi
 
 ## variables
@@ -54,28 +54,26 @@ NO_COLOR="\[\033[0m\]"
 E_RED="\033[01;31m"
 E_NO_COLLOR="\033[0m"
 
-
 export CLICOLOR=1
 export LSCOLORS=ExFxBxDxCxegedabagacad
 
 if [ -f ~/dotfiles/base/bash/envvars.sh ]; then
-    . ~/dotfiles/base/bash/envvars.sh
+  . ~/dotfiles/base/bash/envvars.sh
 fi
 
 if [ -f ~/.envvars.sh ]; then
-    . ~/.envvars.sh
+  . ~/.envvars.sh
 fi
 
 # Source the git-prompt.sh
 if [ -f "$HOME/dotfiles/base/bash/git-prompt.sh" ]; then
-    . "$HOME/dotfiles/base/bash/git-prompt.sh"
+  . "$HOME/dotfiles/base/bash/git-prompt.sh"
 fi
 
 # Source the fossil prompt
 if [ -f "$HOME/dotfiles/base/bash/fossil-prompt.sh" ]; then
-    . "$HOME/dotfiles/base/bash/fossil-prompt.sh"
+  . "$HOME/dotfiles/base/bash/fossil-prompt.sh"
 fi
-
 
 # don't put duplicate lines or lines starting with space in the history.
 # See bash(1) for more options
@@ -101,12 +99,12 @@ shopt -s checkwinsize
 
 # set variable identifying the chroot you work in (used in the prompt below)
 if [ -z "${debian_chroot:-}" ] && [ -r /etc/debian_chroot ]; then
-    debian_chroot=$(cat /etc/debian_chroot)
+  debian_chroot=$(cat /etc/debian_chroot)
 fi
 
 # set a fancy prompt (non-color, unless we know we "want" color)
 case "$TERM" in
-    xterm-color|*-256color) color_prompt=yes;;
+xterm-color | *-256color) color_prompt=yes ;;
 esac
 
 # uncomment for a colored prompt, if the terminal has the capability; turned
@@ -125,7 +123,6 @@ if [ -n "$force_color_prompt" ]; then
   fi
 fi
 
-
 #-------------------------------------------------------------
 # Shell Prompt - for many examples, see:
 #       http://www.debian-administration.org/articles/205
@@ -135,39 +132,37 @@ fi
 #-------------------------------------------------------------
 
 if [ "$color_prompt" = yes ]; then
-    PS1='\[\033[01;36m\][ ${debian_chroot:+($debian_chroot)}\[\033[0m\]\u\[\033[0m\]@\[\033[0m\]\h\[\033[01;32m\] | \[\033[0m\]\w\[\033[00m\] \[\033[01;36m\]]\[\033[01;0m\]$(__git_ps1 " (%s)")$(__fossil_ps1 " (%s)")\[\033[36m\]\$ \[\033[0m\]'
+  PS1='\[\033[01;36m\][ ${debian_chroot:+($debian_chroot)}\[\033[0m\]\u\[\033[0m\]@\[\033[0m\]\h\[\033[01;32m\] | \[\033[0m\]\w\[\033[00m\] \[\033[01;36m\]]\[\033[01;0m\]$(__git_ps1 " (%s)")$(__fossil_ps1 " (%s)")\[\033[36m\]\$ \[\033[0m\]'
 else
-    PS1='${debian_chroot:+($debian_chroot)}\u@\h:\w-> '
+  PS1='${debian_chroot:+($debian_chroot)}\u@\h:\w-> '
 fi
 unset color_prompt force_color_prompt
 
 # If this is an xterm set the title to user@host:dir
 case "$TERM" in
-xterm*|rxvt*)
-    PS1="\[\e]0;${debian_chroot:+($debian_chroot)}\u@\h: \w\a\]$PS1"
-    ;;
-*)
-    ;;
+xterm* | rxvt*)
+  PS1="\[\e]0;${debian_chroot:+($debian_chroot)}\u@\h: \w\a\]$PS1"
+  ;;
+*) ;;
 esac
 
 # {{ Functions
 if [ -f ~/dotfiles/base/bash/funcs.sh ]; then
-    . ~/dotfiles/base/bash/funcs.sh
+  . ~/dotfiles/base/bash/funcs.sh
 fi
 
 # {{ Alias definitions.
 
 if [ -f ~/dotfiles/base/bash/aliases.sh ]; then
-    . ~/dotfiles/base/bash/aliases.sh
+  . ~/dotfiles/base/bash/aliases.sh
 fi
 
 # You may want to put all your additions into a separate file like
 # ~/.bash_aliases, instead of adding them here directly.
 # See /usr/share/doc/bash-doc/examples in the bash-doc package.
 if [ -f ~/.bash_aliases ]; then
-    . ~/.bash_aliases
+  . ~/.bash_aliases
 fi
-
 
 # {{ Completion
 
@@ -193,36 +188,35 @@ if [ -f /usr/share/doc/fzf/examples/completion.bash ]; then
   source /usr/share/doc/fzf/examples/completion.bash
 fi
 
-
 if [ -f /usr/local/etc/bash_completion ]; then
   . /usr/local/etc/bash_completion
 fi
 
-if type brew &>/dev/null
-then
-  HOMEBREW_PREFIX="$(brew --prefix)"
-  if [[ -r "${HOMEBREW_PREFIX}/etc/profile.d/bash_completion.sh" ]]
-  then
-    source "${HOMEBREW_PREFIX}/etc/profile.d/bash_completion.sh"
-  else
-    for COMPLETION in "${HOMEBREW_PREFIX}/etc/bash_completion.d/"*
-    do
-      [[ -r "${COMPLETION}" ]] && source "${COMPLETION}"
-    done
-  fi
-fi
+# if type brew &>/dev/null
+# then
+#   HOMEBREW_PREFIX="$(brew --prefix)"
+#   if [[ -r "${HOMEBREW_PREFIX}/etc/profile.d/bash_completion.sh" ]]
+#   then
+#     source "${HOMEBREW_PREFIX}/etc/profile.d/bash_completion.sh"
+#   else
+#     for COMPLETION in "${HOMEBREW_PREFIX}/etc/bash_completion.d/"*
+#     do
+#       [[ -r "${COMPLETION}" ]] && source "${COMPLETION}"
+#     done
+#   fi
+# fi
 
 if [ -d "/opt/homebrew/bin" ]; then
-    eval "$(/opt/homebrew/bin/brew shellenv)"
+  eval "$(/opt/homebrew/bin/brew shellenv)"
 fi
 
 if [ -f ~/dotfiles/base/bash/.profile ]; then
-    . ~/dotfiles/base/bash/.profile
+  . ~/dotfiles/base/bash/.profile
 fi
 
 if [ -d "$HOME/dotfiles/base/phpdev/bin" ]; then
-    # phpdev preecedence over system bin.
-    export PATH="$HOME/dotfiles/base/phpdev/bin:$PATH"
+  # phpdev preecedence over system bin.
+  export PATH="$HOME/dotfiles/base/phpdev/bin:$PATH"
 fi
 
 # for dir in "$HOME"/dotfiles/plugins/*/; do
@@ -232,70 +226,68 @@ fi
 # done
 
 if [ -d "$HOME/dotfiles/plugins/dotfiles-priv/bin" ]; then
-    # phpdev preecedence over system bin.
-    export PATH="$HOME/dotfiles/plugins/dotfiles-priv/bin:$PATH"
+  # phpdev preecedence over system bin.
+  export PATH="$HOME/dotfiles/plugins/dotfiles-priv/bin:$PATH"
 fi
 # export PATH="/usr/local/opt/php@7.4/bin:$PATH"
 # export PATH="/usr/local/opt/php@7.4/sbin:$PATH"
 
 if [ -d "$HOME/public_html/bin" ]; then
-    # custom server bin precedence over system bin.
-    export PATH="$HOME/public_html/bin:$PATH"
+  # custom server bin precedence over system bin.
+  export PATH="$HOME/public_html/bin:$PATH"
 fi
 
 if [ -d "$HOME/.local/bin" ]; then
-    # custom server bin precedence over system bin.
-    export PATH="$HOME/.local/bin:$PATH"
+  # custom server bin precedence over system bin.
+  export PATH="$HOME/.local/bin:$PATH"
 fi
 
 if [ -d "$HOME/bin/platform-tools" ]; then
-    # add android platform tools.
-    export PATH="$HOME/bin/platform-tools:$PATH"
+  # add android platform tools.
+  export PATH="$HOME/bin/platform-tools:$PATH"
 fi
 
 if [ -d "$HOME/dev/pgk_infrastructure/bin" ]; then
-    # add infra bin.
-    export PATH="$HOME/dev/pgk_infrastructure/bin:$PATH"
+  # add infra bin.
+  export PATH="$HOME/dev/pgk_infrastructure/bin:$PATH"
 fi
 
 export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"                   # This loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion" # This loads nvm bash_completion
 
 # [ -d "$HOME/dev/vagrant-docker-engine" ] && {
 #   export DOCKER_HOST=tcp://docker.local:2375
 # }
 
 if [ -d "$HOME/.phpenv/bin" ]; then
-    # add phpdev
-    export PATH="$HOME/.phpenv/bin:$PATH"
-    eval "$(phpenv init -)"
+  # add phpdev
+  export PATH="$HOME/.phpenv/bin:$PATH"
+  eval "$(phpenv init -)"
 fi
 
 if [[ "$OSTYPE" == "darwin"* ]] && [[ -d "$HOME/Library/pnpm" ]]; then
-	# pnpm
-	export PNPM_HOME="$HOME/Library/pnpm"
-	export PATH="$PNPM_HOME:$PATH"
-	# pnpm end
+  # pnpm
+  export PNPM_HOME="$HOME/Library/pnpm"
+  export PATH="$PNPM_HOME:$PATH"
+  # pnpm end
 fi
 
 [ -d "$HOME/.cargo/env" ] && {
-	. "$HOME/.cargo/env"
+  . "$HOME/.cargo/env"
 }
 
 # emscripten
 [ -d "$HOME/dev/emsdk" ] && {
-	export PATH="$HOME/dev/emsdk:$PATH"
+  export PATH="$HOME/dev/emsdk:$PATH"
 }
 
 # emscripten too
 [ -d "$HOME/dev/emsdk/upstream/emscripten" ] && {
-	export PATH="$HOME/dev/emsdk/upstream/emscripten:$PATH"
+  export PATH="$HOME/dev/emsdk/upstream/emscripten:$PATH"
 }
-
 
 # CDP
 [ -d "$HOME/cdpr8/_cdp/_cdprogs" ] && {
-	export PATH="$HOME/cdpr8/_cdp/_cdprogs:$PATH"
+  export PATH="$HOME/cdpr8/_cdp/_cdprogs:$PATH"
 }
-
