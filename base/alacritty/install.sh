@@ -10,5 +10,6 @@ ROOT_PATH=$(dirname "$PLUGIN_PATH")
 
 cat "$PLUGIN_PATH/themes/tokyo-night.yml" > "$PLUGIN_PATH/themes/current.yml"
 mkdir -p "$HOME/.config/alacritty"
-ln -sf "$PLUGIN_PATH/alacritty.yml" "$HOME/.config/alacritty/alacritty.yml"
+# ln -sf "$PLUGIN_PATH/alacritty.yml" "$HOME/.config/alacritty/alacritty.yml"
+ln -sf "$PLUGIN_PATH/alacritty.toml" "$HOME/.config/alacritty/alacritty.toml"
 

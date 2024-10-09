@@ -212,6 +212,9 @@ then
   fi
 fi
 
+if [ -d "/opt/homebrew/bin" ]; then
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+fi
 
 if [ -f ~/dotfiles/base/bash/.profile ]; then
     . ~/dotfiles/base/bash/.profile
