@@ -266,6 +266,10 @@ if [ -d "$HOME/.phpenv/bin" ]; then
   eval "$(phpenv init -)"
 fi
 
+if [ -d "$HOME/.local/bin" ]; then
+  export PATH="$HOME/.local/bin:$PATH"
+fi
+
 if [[ "$OSTYPE" == "darwin"* ]] && [[ -d "$HOME/Library/pnpm" ]]; then
   # pnpm
   export PNPM_HOME="$HOME/Library/pnpm"
@@ -290,4 +294,12 @@ fi
 # CDP
 [ -d "$HOME/cdpr8/_cdp/_cdprogs" ] && {
   export PATH="$HOME/cdpr8/_cdp/_cdprogs:$PATH"
+}
+
+# cruby
+[ -f "/opt/homebrew/opt/chruby/share/chruby/chruby.sh" ] && {
+  # source /opt/homebrew/opt/chruby/share/chruby/chruby.sh
+  source $(brew --prefix)/opt/chruby/share/chruby/chruby.sh
+  source $(brew --prefix)/opt/chruby/share/chruby/auto.sh
+  chruby ruby-3.4.1
 }

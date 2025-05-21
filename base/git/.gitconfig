@@ -46,5 +46,13 @@
 
 [log]
 	decorate = full
+
 [init]
 	defaultBranch = trunk
+
+[user]
+  name = pgk
+  email = pgk@pgk.gr
+
+[pull]
+	rebase = true
