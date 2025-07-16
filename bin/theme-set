@@ -20,6 +20,7 @@ PLUGIN_DIR="$ROOT_PATH/base/alacritty"
 if [ "$1" == 'dark' ]; then
   # cat "$PLUGIN_DIR/themes/tokyo-night.yml"
   cat "$PLUGIN_DIR/alacritty-theme/themes/tokyo-night.toml" >"$PLUGIN_DIR/themes/current.toml"
+  echo "dark" >~/.nvim-colorscheme.txt
   cat <<EOF >~/.vim-default-colors.vim
 let g:solarized_termcolors=256
 set background=dark
@@ -32,6 +33,7 @@ endif
 EOF
 elif [ "$1" == 'light' ]; then
   cat "$PLUGIN_DIR/alacritty-theme/themes/solarized_light.toml" >"$PLUGIN_DIR/themes/current.toml"
+  echo "light" >~/.nvim-colorscheme.txt
   cat <<EOF >~/.vim-default-colors.vim
 let g:solarized_termcolors=256
 colo seoul256
