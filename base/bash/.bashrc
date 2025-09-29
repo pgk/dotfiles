@@ -303,3 +303,6 @@ fi
   source $(brew --prefix)/opt/chruby/share/chruby/auto.sh
   chruby ruby-3.4.1
 }
+[ -f "$HOME/perl5/perlbrew/etc/bashrc" ] && {
+  source "$HOME/perl5/perlbrew/etc/bashrc"
+}
