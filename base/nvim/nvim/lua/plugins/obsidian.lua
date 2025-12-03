@@ -491,6 +491,9 @@ return {
         vim.opt_local.wrap = true
         vim.opt_local.linebreak = true
         vim.opt_local.breakindent = true
+        vim.opt_local.breakindentopt = "shift:2,sbr"
+        vim.opt_local.showbreak = "↳ "
+        vim.opt_local.textwidth = 0  -- Don't hard wrap
         vim.keymap.set("n", "gf", smart_follow_link, { buffer = true, desc = "Smart follow link" })
         vim.keymap.set("n", "<leader>ch", function()
           require("obsidian").util.toggle_checkbox()
