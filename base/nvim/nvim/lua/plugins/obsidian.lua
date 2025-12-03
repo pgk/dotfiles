@@ -505,6 +505,16 @@ return {
     vim.keymap.set("n", "<leader>os", "<cmd>ObsidianSearch<cr>", { desc = "Obsidian search" })
     vim.keymap.set("n", "<leader>on", "<cmd>ObsidianNew<cr>", { desc = "Obsidian new note" })
     vim.keymap.set("n", "<leader>oi", "<cmd>ObsidianInsertLink<cr>", { desc = "Obsidian insert link" })
+    vim.keymap.set("n", "<leader>ob", function()
+      local current_file = vim.api.nvim_buf_get_name(0)
+      local backlinks = get_backlinks(current_file)
+      if #backlinks == 0 then
+        vim.notify("No backlinks found", vim.log.levels.INFO)
+        return
+      end
+      vim.cmd("ObsidianBacklinks")
+    end, { desc = "Obsidian backlinks (picker)" })
+    vim.keymap.set("n", "<leader>of", "<cmd>ObsidianLinks<cr>", { desc = "Obsidian forward links (picker)" })
   end,
   opts = {
     workspaces = {

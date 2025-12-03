@@ -18,6 +18,8 @@ This document describes the custom Obsidian integration for Neovim, built on top
 | `<leader>os` | `:ObsidianSearch` | Search vault (fulltext) |
 | `<leader>on` | `:ObsidianNew` | Create a new note |
 | `<leader>oi` | `:ObsidianInsertLink` | Search vault and insert link at cursor |
+| `<leader>ob` | `:ObsidianBacklinks` | Backlinks in picker |
+| `<leader>of` | `:ObsidianLinks` | Forward links in picker |
 
 ### In Markdown Files
 
