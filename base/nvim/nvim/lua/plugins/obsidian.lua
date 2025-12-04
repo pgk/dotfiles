@@ -116,7 +116,7 @@ return {
         if not seen[link] then
           seen[link] = true
           -- Find the actual file path
-          local handle = io.popen('find "' .. vault_path .. '" -name "' .. link .. '.md" -type f | head -1')
+          local handle = io.popen('find "' .. vault_path .. '" -iname "' .. link .. '.md" -type f | head -1')
           if handle then
             local path = handle:read("*a"):gsub("\n", "")
             handle:close()
@@ -268,7 +268,7 @@ return {
       end
       local vault_path = vim.fn.expand("~/notes")
       -- Find the file
-      local handle = io.popen('find "' .. vault_path .. '" -name "' .. link .. '.md" -type f | head -1')
+      local handle = io.popen('find "' .. vault_path .. '" -iname "' .. link .. '.md" -type f | head -1')
       if not handle then
         return
       end
@@ -453,6 +453,411 @@ return {
       })
     end, { desc = "Insert link via fulltext search" })
 
+    -- Transclusion support
+    local transclusion_ns = vim.api.nvim_create_namespace("obsidian_transclusion")
+    local transclusion_enabled = false
+
+    -- Define highlight groups for transclusion
+    vim.api.nvim_set_hl(0, "ObsidianTransclusionBorder", { fg = "#565f89", italic = true })
+    vim.api.nvim_set_hl(0, "ObsidianTransclusionContent", { fg = "#9aa5ce", italic = true })
+    vim.api.nvim_set_hl(0, "ObsidianTransclusionHeader", { fg = "#7aa2f7", bold = true, italic = true })
+    vim.api.nvim_set_hl(0, "ObsidianTransclusionBold", { fg = "#c0caf5", bold = true, italic = true })
+    vim.api.nvim_set_hl(0, "ObsidianTransclusionList", { fg = "#9ece6a", italic = true })
+    vim.api.nvim_set_hl(0, "ObsidianTransclusionLink", { fg = "#7dcfff", italic = true, underline = true })
+
+    local function wrap_line(text, width)
+      if #text <= width then
+        return { text }
+      end
+      local lines = {}
+      local current = ""
+      for word in text:gmatch("%S+") do
+        if #current + #word + 1 <= width then
+          current = current == "" and word or (current .. " " .. word)
+        else
+          if current ~= "" then
+            table.insert(lines, current)
+          end
+          current = word
+        end
+      end
+      if current ~= "" then
+        table.insert(lines, current)
+      end
+      return lines
+    end
+
+    local function get_line_highlight(line)
+      if line:match("^#+%s") then
+        return "ObsidianTransclusionHeader"
+      elseif line:match("^%s*[-*]%s") or line:match("^%s*%d+%.%s") then
+        return "ObsidianTransclusionList"
+      elseif line:match("%[%[.+%]%]") or line:match("%[.+%]%(") then
+        return "ObsidianTransclusionLink"
+      elseif line:match("%*%*.+%*%*") or line:match("__.+__") then
+        return "ObsidianTransclusionBold"
+      else
+        return "ObsidianTransclusionContent"
+      end
+    end
+
+    local function get_transclusion_content(note_name)
+      local vault_path = vim.fn.expand("~/notes")
+      local handle = io.popen('find "' .. vault_path .. '" -iname "' .. note_name .. '.md" -type f | head -1')
+      if not handle then
+        return nil
+      end
+      local filepath = handle:read("*a"):gsub("\n", "")
+      handle:close()
+
+      if filepath == "" then
+        return nil
+      end
+
+      local file = io.open(filepath, "r")
+      if not file then
+        return nil
+      end
+
+      local lines = {}
+      local in_frontmatter = false
+      local line_num = 0
+      for line in file:lines() do
+        line_num = line_num + 1
+        if line:match("^---") and line_num == 1 then
+          in_frontmatter = true
+        elseif line:match("^---") and in_frontmatter then
+          in_frontmatter = false
+        elseif not in_frontmatter then
+          table.insert(lines, line)
+        end
+      end
+      file:close()
+      return lines
+    end
+
+    local function render_transclusions()
+      local buf = vim.api.nvim_get_current_buf()
+      vim.api.nvim_buf_clear_namespace(buf, transclusion_ns, 0, -1)
+
+      if not transclusion_enabled then
+        return
+      end
+
+      -- Calculate wrap width based on window width
+      local win_width = vim.api.nvim_win_get_width(0)
+      local wrap_width = math.max(40, win_width - 10) -- Leave room for prefix and margin
+
+      local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+      for i, line in ipairs(lines) do
+        -- Match ![[note]] pattern
+        local note_name = line:match("!%[%[([^%]|]+)")
+        if note_name then
+          local content = get_transclusion_content(note_name)
+          if content and #content > 0 then
+            local virt_lines = {}
+            -- Top border
+            table.insert(virt_lines, { { "  ┌─ " .. note_name .. " ", "ObsidianTransclusionBorder" } })
+            -- Content lines with wrapping and highlighting
+            for _, content_line in ipairs(content) do
+              local hl = get_line_highlight(content_line)
+              local wrapped = wrap_line(content_line, wrap_width)
+              for wi, wline in ipairs(wrapped) do
+                local prefix = wi == 1 and "  │ " or "  │   "
+                table.insert(virt_lines, { { prefix .. wline, hl } })
+              end
+            end
+            -- Bottom border
+            table.insert(virt_lines, { { "  └" .. string.rep("─", 40), "ObsidianTransclusionBorder" } })
+
+            vim.api.nvim_buf_set_extmark(buf, transclusion_ns, i - 1, 0, {
+              virt_lines = virt_lines,
+              virt_lines_above = false,
+            })
+          end
+        end
+      end
+    end
+
+    vim.api.nvim_create_user_command("ObsidianTransclusionToggle", function()
+      transclusion_enabled = not transclusion_enabled
+      if transclusion_enabled then
+        render_transclusions()
+      else
+        local buf = vim.api.nvim_get_current_buf()
+        vim.api.nvim_buf_clear_namespace(buf, transclusion_ns, 0, -1)
+      end
+      vim.notify("Transclusion " .. (transclusion_enabled and "enabled" or "disabled"), vim.log.levels.INFO)
+    end, { desc = "Toggle transclusion rendering" })
+
+    -- Debug command
+    vim.api.nvim_create_user_command("ObsidianTransclusionDebug", function()
+      local output = {}
+      local vault_path = vim.fn.expand("~/notes")
+      table.insert(output, "Vault path: " .. vault_path)
+      local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+      for i, line in ipairs(lines) do
+        local note_name = line:match("!%[%[([^%]|]+)")
+        if note_name then
+          table.insert(output, "")
+          table.insert(output, "Line " .. i .. ": Found transclusion to '" .. note_name .. "'")
+          -- Debug the find command
+          local cmd = 'find "' .. vault_path .. '" -iname "' .. note_name .. '.md" -type f'
+          table.insert(output, "  Command: " .. cmd)
+          local handle = io.popen(cmd .. " 2>&1")
+          if handle then
+            local result = handle:read("*a")
+            handle:close()
+            table.insert(output, "  Find result: '" .. result:gsub("\n", " ") .. "'")
+          end
+          local content = get_transclusion_content(note_name)
+          if content then
+            table.insert(output, "  Content: " .. #content .. " lines")
+            for j, cl in ipairs(content) do
+              table.insert(output, "    [" .. j .. "] " .. cl)
+            end
+          else
+            table.insert(output, "  Content: NOT FOUND")
+          end
+          -- Also show raw file lines
+          local filepath = result:gsub("%s+$", "")
+          local file = io.open(filepath, "r")
+          if file then
+            table.insert(output, "  Raw file (first 5 lines):")
+            local lnum = 0
+            for rawline in file:lines() do
+              lnum = lnum + 1
+              table.insert(output, "    " .. lnum .. ": " .. rawline)
+              if lnum >= 5 then break end
+            end
+            file:close()
+          end
+        end
+      end
+      -- Open in scratch buffer
+      vim.cmd("new")
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, output)
+      vim.bo.buftype = "nofile"
+      vim.bo.bufhidden = "wipe"
+    end, { desc = "Debug transclusion detection" })
+
+    -- Rename note and update all links
+    vim.api.nvim_create_user_command("ObsidianRename", function(opts)
+      local current_file = vim.api.nvim_buf_get_name(0)
+      if not current_file:match("%.md$") then
+        vim.notify("Not a markdown file", vim.log.levels.ERROR)
+        return
+      end
+
+      local vault_path = vim.fn.expand("~/notes")
+      local old_name = vim.fn.fnamemodify(current_file, ":t:r")
+      local new_name = opts.args
+
+      if new_name == "" then
+        new_name = vim.fn.input("New name: ", old_name)
+        if new_name == "" or new_name == old_name then
+          vim.notify("Rename cancelled", vim.log.levels.INFO)
+          return
+        end
+      end
+
+      -- New file path
+      local new_file = vim.fn.fnamemodify(current_file, ":h") .. "/" .. new_name .. ".md"
+
+      -- Check if target exists
+      if vim.fn.filereadable(new_file) == 1 then
+        vim.notify("File already exists: " .. new_name, vim.log.levels.ERROR)
+        return
+      end
+
+      -- Find all files that link to the old name (case-insensitive)
+      local search_term = "[[" .. old_name
+      local handle = io.popen('grep -rilF -- "' .. search_term .. '" "' .. vault_path .. '" --include="*.md" 2>/dev/null')
+      local files_to_update = {}
+      if handle then
+        local result = handle:read("*a")
+        handle:close()
+        for file in result:gmatch("[^\n]+") do
+          table.insert(files_to_update, file)
+        end
+      end
+
+      vim.notify("Found " .. #files_to_update .. " files with links", vim.log.levels.INFO)
+
+      -- Update links in all files (case-insensitive replace)
+      local updated_count = 0
+      local escape_pattern = function(s)
+        return s:gsub("([%-%.%+%[%]%(%)%$%^%%%?%*])", "%%%1")
+      end
+      local old_name_escaped = escape_pattern(old_name)
+
+      for _, filepath in ipairs(files_to_update) do
+        local file = io.open(filepath, "r")
+        if file then
+          local content = file:read("*a")
+          file:close()
+
+          -- Replace [[old_name]] and [[old_name|alias]] (case-insensitive)
+          local new_content = content:gsub("%[%[" .. old_name_escaped .. "%]%]", "[[" .. new_name .. "]]")
+          new_content = new_content:gsub("%[%[" .. old_name_escaped .. "|", "[[" .. new_name .. "|")
+          -- Also try case-insensitive by lowercasing comparison
+          new_content = new_content:gsub("%[%[([^%]|]+)%]%]", function(match)
+            if match:lower() == old_name:lower() then
+              return "[[" .. new_name .. "]]"
+            end
+            return "[[" .. match .. "]]"
+          end)
+          new_content = new_content:gsub("%[%[([^%]|]+)|", function(match)
+            if match:lower() == old_name:lower() then
+              return "[[" .. new_name .. "|"
+            end
+            return "[[" .. match .. "|"
+          end)
+
+          if new_content ~= content then
+            local out_file = io.open(filepath, "w")
+            if out_file then
+              out_file:write(new_content)
+              out_file:close()
+              updated_count = updated_count + 1
+            end
+          end
+        end
+      end
+
+      -- Update id: in frontmatter in the current buffer
+      local buf_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+      local old_name_pattern = old_name:gsub("%-", "%%-")
+      for i, line in ipairs(buf_lines) do
+        if line:match("^id:%s*" .. old_name_pattern .. "$") then
+          buf_lines[i] = "id: " .. new_name
+          vim.api.nvim_buf_set_lines(0, 0, -1, false, buf_lines)
+          break
+        end
+      end
+
+      -- Rename the file
+      vim.cmd("write " .. vim.fn.fnameescape(new_file))
+      vim.fn.delete(current_file)
+      vim.bo.modified = false -- Mark old buffer as not modified
+      vim.cmd("edit " .. vim.fn.fnameescape(new_file))
+      vim.cmd("bdelete! #") -- Force delete the old buffer
+
+      vim.notify("Renamed to " .. new_name .. ", updated " .. updated_count .. " files", vim.log.levels.INFO)
+    end, { nargs = "?", desc = "Rename note and update links" })
+
+    -- Helper to find previous daily note
+    local function find_previous_daily_note(today_str)
+      local vault_path = vim.fn.expand("~/notes")
+      -- Find all daily notes (YYYY-MM-DD.md pattern)
+      local handle = io.popen('find "' .. vault_path .. '" -maxdepth 1 -name "????-??-??.md" -type f | sort -r')
+      if not handle then
+        return nil
+      end
+      local result = handle:read("*a")
+      handle:close()
+
+      for file in result:gmatch("[^\n]+") do
+        local date_str = vim.fn.fnamemodify(file, ":t:r")
+        if date_str < today_str then
+          return date_str
+        end
+      end
+      return nil
+    end
+
+    -- Helper to get random notes for review (excluding today and already linked)
+    local function get_random_review_notes(today_str, count)
+      local vault_path = vim.fn.expand("~/notes")
+      local handle = io.popen('find "' .. vault_path .. '" -name "*.md" -type f')
+      if not handle then
+        return {}
+      end
+      local result = handle:read("*a")
+      handle:close()
+
+      local files = {}
+      local today_filename = today_str .. ".md"
+      for file in result:gmatch("[^\n]+") do
+        local filename = vim.fn.fnamemodify(file, ":t")
+        if filename ~= today_filename then
+          table.insert(files, file)
+        end
+      end
+
+      if #files < count then
+        count = #files
+      end
+
+      math.randomseed(os.time())
+      local selected = {}
+      local indices = {}
+      while #selected < count and #selected < #files do
+        local idx = math.random(#files)
+        if not indices[idx] then
+          indices[idx] = true
+          local note_name = vim.fn.fnamemodify(files[idx], ":t:r")
+          table.insert(selected, note_name)
+        end
+      end
+      return selected
+    end
+
+    -- Custom daily note command with template
+    vim.api.nvim_create_user_command("ObsidianDaily", function(opts)
+      local vault_path = vim.fn.expand("~/notes")
+      local offset = tonumber(opts.args) or 0
+      local date = os.time() + (offset * 24 * 60 * 60)
+      local today_str = os.date("%Y-%m-%d", date)
+      local daily_file = vault_path .. "/" .. today_str .. ".md"
+
+      local is_new = vim.fn.filereadable(daily_file) == 0
+
+      if is_new then
+        -- Create with template
+        local lines = {}
+        table.insert(lines, "# " .. today_str)
+        table.insert(lines, "")
+
+        -- Link to previous daily note
+        local prev_daily = find_previous_daily_note(today_str)
+        if prev_daily then
+          table.insert(lines, "Previous: [[" .. prev_daily .. "]]")
+          table.insert(lines, "")
+        end
+
+        -- Add random notes for review
+        table.insert(lines, "## Review")
+        table.insert(lines, "")
+        local random_notes = get_random_review_notes(today_str, 5)
+        for _, note in ipairs(random_notes) do
+          table.insert(lines, "- [[" .. note .. "]]")
+        end
+        table.insert(lines, "")
+        table.insert(lines, "## Notes")
+        table.insert(lines, "")
+
+        -- Write file
+        local file = io.open(daily_file, "w")
+        if file then
+          file:write(table.concat(lines, "\n"))
+          file:close()
+        end
+      end
+
+      vim.cmd("edit " .. vim.fn.fnameescape(daily_file))
+    end, { nargs = "?", desc = "Open daily note with template" })
+
+    -- Auto-update transclusions on text change
+    vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI", "BufEnter" }, {
+      pattern = "*.md",
+      callback = function()
+        if transclusion_enabled then
+          vim.defer_fn(render_transclusions, 100)
+        end
+      end,
+    })
+
     -- Smart follow link - works even when cursor is on [[ or ]]
     local function smart_follow_link()
       local line = vim.api.nvim_get_current_line()
@@ -463,7 +868,7 @@ return {
         -- Check if cursor is anywhere within [[ and ]]
         if col >= start_pos and col <= end_pos - 1 then
           local vault_path = vim.fn.expand("~/notes")
-          local handle = io.popen('find "' .. vault_path .. '" -name "' .. link .. '.md" -type f | head -1')
+          local handle = io.popen('find "' .. vault_path .. '" -iname "' .. link .. '.md" -type f | head -1')
           if handle then
             local result = handle:read("*a"):gsub("\n", "")
             handle:close()
@@ -472,7 +877,10 @@ return {
               return
             end
           end
-          vim.notify("Note not found: " .. link, vim.log.levels.WARN)
+          -- Note doesn't exist - create it
+          local new_file = vault_path .. "/" .. link .. ".md"
+          vim.cmd("edit " .. vim.fn.fnameescape(new_file))
+          vim.notify("Created: " .. link, vim.log.levels.INFO)
           return
         end
       end
@@ -502,7 +910,7 @@ return {
     })
 
     -- Keybindings
-    vim.keymap.set("n", "<leader>od", "<cmd>ObsidianToday<cr>", { desc = "Obsidian daily note" })
+    vim.keymap.set("n", "<leader>od", "<cmd>ObsidianDaily<cr>", { desc = "Obsidian daily note" })
     vim.keymap.set("n", "<leader>or", "<cmd>ObsidianRandom<cr>", { desc = "Obsidian random note" })
     vim.keymap.set("n", "<leader>ol", "<cmd>ObsidianLinksPanel<cr>", { desc = "Obsidian links panel" })
     vim.keymap.set("n", "<leader>os", "<cmd>ObsidianSearch<cr>", { desc = "Obsidian search" })
@@ -518,6 +926,8 @@ return {
       vim.cmd("ObsidianBacklinks")
     end, { desc = "Obsidian backlinks (picker)" })
     vim.keymap.set("n", "<leader>of", "<cmd>ObsidianLinks<cr>", { desc = "Obsidian forward links (picker)" })
+    vim.keymap.set("n", "<leader>ot", "<cmd>ObsidianTransclusionToggle<cr>", { desc = "Obsidian toggle transclusions" })
+    vim.keymap.set("n", "<leader>oR", "<cmd>ObsidianRename<cr>", { desc = "Obsidian rename note" })
   end,
   opts = {
     workspaces = {

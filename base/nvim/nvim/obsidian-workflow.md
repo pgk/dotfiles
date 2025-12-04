@@ -20,6 +20,8 @@ This document describes the custom Obsidian integration for Neovim, built on top
 | `<leader>oi` | `:ObsidianInsertLink` | Search vault and insert link at cursor |
 | `<leader>ob` | `:ObsidianBacklinks` | Backlinks in picker |
 | `<leader>of` | `:ObsidianLinks` | Forward links in picker |
+| `<leader>ot` | `:ObsidianTransclusionToggle` | Toggle transclusion rendering |
+| `<leader>oR` | `:ObsidianRename` | Rename note and update all links |
 
 ### In Markdown Files
 
@@ -50,6 +52,9 @@ This document describes the custom Obsidian integration for Neovim, built on top
 | `:ObsidianDailyReview` | Add 5 random notes to today's daily note |
 | `:ObsidianBacklinks` | Show backlinks in picker (built-in) |
 | `:ObsidianLinks` | Show forward links in picker (built-in) |
+| `:ObsidianTransclusionToggle` | Toggle inline transclusion rendering |
+| `:ObsidianRename [name]` | Rename current note and update all links |
+| `:ObsidianDaily [offset]` | Open daily note with template (offset: -1 = yesterday) |
 
 ## Links Panel
 
@@ -62,10 +67,41 @@ The panel updates automatically when you switch buffers. Navigate to a link and 
 
 ## Daily Notes Workflow
 
-1. `<leader>od` - Open today's note
-2. `:ObsidianDailyReview` - Add 5 random notes for review (excludes already-linked notes)
-3. Review each linked note, add thoughts
-4. Use `<leader>oi` to insert links to related notes
+New daily notes are automatically created with a template:
+
+```markdown
+# 2025-01-15
+
+Previous: [[2025-01-13]]
+
+## Review
+
+- [[random-note-1]]
+- [[random-note-2]]
+- [[random-note-3]]
+- [[random-note-4]]
+- [[random-note-5]]
+
+## Notes
+
+```
+
+Features:
+- Links to the **previous daily note** (not yesterday, but the last existing entry)
+- 5 random notes for review
+- Ready-to-use structure
+
+Workflow:
+1. `<leader>od` - Open/create today's note
+2. Review the random notes, add thoughts
+3. Use `<leader>oi` to insert links to related notes
+
+## Renaming Notes
+
+Use `<leader>oR` or `:ObsidianRename` to rename the current note:
+- Prompts for new name (pre-filled with current name)
+- Renames the file
+- Updates all `[[links]]` across the vault automatically
 
 ## Quick Capture Workflow
 
@@ -81,6 +117,27 @@ The panel updates automatically when you switch buffers. Navigate to a link and 
 3. `<C-w>l` - Focus the panel
 4. Navigate to a link, press `<CR>` to open
 5. `gf` on any `[[link]]` in the main editor to follow
+
+## Transclusion
+
+Use `![[note-name]]` syntax to embed another note's content. Toggle rendering with `<leader>ot`.
+
+When enabled, transclusions render as:
+```
+![[some-note]]
+  ┌─ some-note
+  │ First line of the note...
+  │ Second line...
+  │ ...
+  └────────────────────────────────────────
+```
+
+- Content is read-only (virtual text)
+- Shows entire file content
+- Skips YAML frontmatter
+- Wraps long lines to fit window
+- Markdown highlighting (headers, lists, links, bold)
+- Auto-updates as you edit
 
 ## Markdown Settings
 
