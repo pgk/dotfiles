@@ -151,6 +151,66 @@ function M.rename(new_name)
   vim.notify("Renamed to " .. new_name .. ", updated " .. updated_count .. " files", vim.log.levels.INFO)
 end
 
+-- Extract selection to new note
+function M.extract_note()
+  -- Get visual selection
+  local start_pos = vim.fn.getpos("'<")
+  local end_pos = vim.fn.getpos("'>")
+  local start_line, start_col = start_pos[2], start_pos[3]
+  local end_line, end_col = end_pos[2], end_pos[3]
+
+  local lines = vim.api.nvim_buf_get_lines(0, start_line - 1, end_line, false)
+  if #lines == 0 then
+    vim.notify("No text selected", vim.log.levels.WARN)
+    return
+  end
+
+  -- Clamp end_col to actual line length (handles V and $ selections)
+  local last_line_len = #lines[#lines]
+  if end_col > last_line_len then
+    end_col = last_line_len
+  end
+
+  -- Adjust for partial line selection
+  if #lines == 1 then
+    lines[1] = lines[1]:sub(start_col, end_col)
+  else
+    lines[1] = lines[1]:sub(start_col)
+    lines[#lines] = lines[#lines]:sub(1, end_col)
+  end
+
+  local selected_text = table.concat(lines, "\n")
+
+  -- Prompt for note name
+  local note_name = vim.fn.input("New note name: ")
+  if note_name == "" then
+    vim.notify("Extract cancelled", vim.log.levels.INFO)
+    return
+  end
+
+  -- Check if note already exists
+  local new_file = utils.vault_path .. "/" .. note_name .. ".md"
+  if vim.fn.filereadable(new_file) == 1 then
+    vim.notify("Note already exists: " .. note_name, vim.log.levels.ERROR)
+    return
+  end
+
+  -- Create new note with selected text
+  local file = io.open(new_file, "w")
+  if not file then
+    vim.notify("Failed to create note", vim.log.levels.ERROR)
+    return
+  end
+  file:write(selected_text .. "\n")
+  file:close()
+
+  -- Replace selection with link
+  local link = "[[" .. note_name .. "]]"
+  vim.api.nvim_buf_set_text(0, start_line - 1, start_col - 1, end_line - 1, end_col, { link })
+
+  vim.notify("Extracted to: " .. note_name, vim.log.levels.INFO)
+end
+
 -- Smart follow link - works even when cursor is on [[ or ]]
 function M.smart_follow_link()
   local line = vim.api.nvim_get_current_line()
@@ -193,6 +253,10 @@ function M.setup()
   vim.api.nvim_create_user_command("ObsidianRename", function(opts)
     M.rename(opts.args or "")
   end, { nargs = "?", desc = "Rename note and update links" })
+
+  vim.api.nvim_create_user_command("ObsidianExtract", function()
+    M.extract_note()
+  end, { range = true, desc = "Extract selection to new note" })
 end
 
 return M

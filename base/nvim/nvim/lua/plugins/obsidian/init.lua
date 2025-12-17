@@ -68,6 +68,7 @@ return {
     vim.keymap.set("n", "<leader>of", "<cmd>ObsidianLinks<cr>", { desc = "Obsidian forward links (picker)" })
     vim.keymap.set("n", "<leader>ot", "<cmd>ObsidianTransclusionToggle<cr>", { desc = "Obsidian toggle transclusions" })
     vim.keymap.set("n", "<leader>oR", "<cmd>ObsidianRename<cr>", { desc = "Obsidian rename note" })
+    vim.keymap.set("v", "<leader>oe", "<cmd>ObsidianExtract<cr>", { desc = "Obsidian extract to note" })
   end,
   opts = {
     workspaces = {
