@@ -67,25 +67,22 @@ function M.open(offset)
   if is_new then
     -- Create with template
     local lines = {}
-    table.insert(lines, "# " .. today_str)
+    table.insert(lines, "Daily note for " .. today_str)
     table.insert(lines, "")
 
     -- Link to previous daily note
     local prev_daily = find_previous_daily_note(today_str)
     if prev_daily then
-      table.insert(lines, "Previous: [[" .. prev_daily .. "]]")
+      table.insert(lines, "Previous #daily-note was: [[" .. prev_daily .. "]]")
       table.insert(lines, "")
     end
 
     -- Add random notes for review
-    table.insert(lines, "## Review")
     table.insert(lines, "")
     local random_notes = get_random_review_notes(today_str, 5)
     for _, note in ipairs(random_notes) do
       table.insert(lines, "- [[" .. note .. "]]")
     end
-    table.insert(lines, "")
-    table.insert(lines, "## Notes")
     table.insert(lines, "")
 
     -- Write file
