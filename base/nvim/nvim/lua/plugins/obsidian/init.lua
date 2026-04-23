@@ -22,12 +22,14 @@ return {
     local transclusion = require("plugins.obsidian.transclusion")
     local daily = require("plugins.obsidian.daily")
     local commands = require("plugins.obsidian.commands")
+    local format = require("plugins.obsidian.format")
 
     -- Setup all modules
     panel.setup()
     transclusion.setup()
     daily.setup()
     commands.setup()
+    format.setup()
 
     -- Set up path settings and mappings for markdown
     vim.api.nvim_create_autocmd("FileType", {
@@ -42,6 +44,10 @@ return {
         vim.opt_local.breakindentopt = "shift:2,sbr"
         vim.opt_local.showbreak = "↳ "
         vim.opt_local.textwidth = 0 -- Don't hard wrap
+        local filepath = vim.api.nvim_buf_get_name(0)
+        if filepath:find(utils.vault_path, 1, true) then
+          vim.opt_local.formatexpr = "v:lua.require'plugins.obsidian.format'.formatexpr()"
+        end
         vim.keymap.set("n", "gf", commands.smart_follow_link, { buffer = true, desc = "Smart follow link" })
         vim.keymap.set("n", "<leader>ch", function()
           require("obsidian").util.toggle_checkbox()
