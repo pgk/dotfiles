@@ -35,7 +35,8 @@ GIT_PS1_SHOWCOLORHINTS="yes"
 export RANGER_LOAD_DEFAULT_RC=FALSE
 # The default editor
 export EDITOR=vim
-export LC_ALL="en_US.UTF-8"
+# export LC_ALL="en_US.UTF-8"
+export LANG="en_US.UTF-8"
 
 ## Colors
 ##
@@ -175,6 +176,13 @@ elif [ -f /etc/bash_completion ]; then
   . /etc/bash_completion
 fi
 
+# Also enable completions when using bash and brew.
+if [[ "$OSTYPE" == "darwin"* ]] && command -v brew >/dev/null 2>&1; then
+  if [ -r "$(brew --prefix)/etc/profile.d/bash_completion.sh" ]; then
+    . "$(brew --prefix)/etc/profile.d/bash_completion.sh"
+  fi
+fi
+
 [ -d /usr/local/opt/fzf/shell ] && {
   . /usr/local/opt/fzf/shell/completion.bash
   . /usr/local/opt/fzf/shell/key-bindings.bash
@@ -305,4 +313,11 @@ fi
 }
 [ -f "$HOME/perl5/perlbrew/etc/bashrc" ] && {
   source "$HOME/perl5/perlbrew/etc/bashrc"
+}
+
+command -v docker-compose >/dev/null 2>&1 || {
+  mkdir -p "$HOME/.local/bin"
+  echo 'docker compose $@' | tee -a "$HOME/.local.bin/docker-compose" &&
+    chmod +x "$HOME/.local/bin/docker-compose"
+
 }

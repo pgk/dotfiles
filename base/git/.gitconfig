@@ -51,8 +51,8 @@
 	defaultBranch = trunk
 
 [user]
-  name = pgk
-  email = pgk@pgk.gr
+  name = Panos Kountanis
+  email = pkountanis@transifex.com
 
 [pull]
 	rebase = true
