@@ -321,3 +321,7 @@ command -v docker-compose >/dev/null 2>&1 || {
     chmod +x "$HOME/.local/bin/docker-compose"
 
 }
+
+command -v nvim >/dev/null 2>&1 && {
+  export EDITOR=nvim
+}
