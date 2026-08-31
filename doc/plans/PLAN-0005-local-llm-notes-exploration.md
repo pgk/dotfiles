@@ -451,18 +451,46 @@ Consequences, both worth keeping in mind:
   and anyone shrinking the ring will silently disarm the fixture. `dev-vault`'s
   CLAUDE.md section says so explicitly.
 
-## Also in this commit
+## The security finding the review turned up (`5b6a5a4`)
 
-`graph.lua` gained the `sanitize()` its two siblings already had — a MEDIUM finding
-from the previous session's security review, brought into scope because this commit
-renders more note-derived text into that picker. `deadlinks.lua` still lacks it.
+`vim.cmd("edit " .. vim.fn.fnameescape(path))` — the pattern in every picker in this
+directory — **executes a note's filename as Ex commands** if it contains a newline.
+`fnameescape` does not escape one, and `nvim_exec2` splits on it first. Confirmed:
+the text after the newline came back as `line 2: E492: Not an editor command`. A note
+named `a\nso/tmp/payload.md`, arriving via sync or a cloned vault, would appear as an
+ordinary orphan row and run arbitrary Vimscript on one `<CR>`. All four pickers now
+use `vim.cmd.edit({ args = { path } })`, which is verified to keep the newline literal.
+
+`sanitize()` had to change too, and the reason generalises: **collapsing every control
+character to a space is not sanitisation, it is a collision.** `a<TAB>b` and `a b`
+rendered identically, and since `path_by_line` is keyed on the rendered row, selecting
+one opened the other — the exact failure the helper existed to prevent. It now escapes
+(`<09>`) rather than blanks, which is injective, and covers the bidi/zero-width
+characters Lua's ASCII-only `%c` misses. One copy in `utils.lua` for all three pickers;
+`deadlinks.lua`'s raw `rel` field, deferred three times, went in with it.
 
 ## Still open
 
 - **Whether either tool actually helps**, which only real use answers. Both now state
   the graph they ran on (components, clusters, modularity) so their output carries its
   own caveat.
-- The `--exclude` finding from the previous review is unfixed and is the most
-  consequential one left: `--exclude journal` silently excludes nothing.
+- **`--exclude` matches only whole relative paths, case-sensitively.** Unfixed, and
+  still the most consequential item: `--exclude journal` silently excludes nothing,
+  and `--exclude` is the only thing keeping a subtree out of `notes-similar`'s upload.
+  Fixing it means deciding whether a bare directory name should exclude its tree and
+  whether matching should be case-insensitive on APFS — a semantic choice.
+- **`json.loads` accepts `NaN`/`Infinity`** and `normalize()` propagates them, so a
+  malfunctioning embedding server writes NaN vectors into `~/.cache/notes-similar/`,
+  where they persist until `--rebuild` and make every score `NaN`. Fix: reject
+  non-finite values in `notes_embed_cache.normalize`.
+- **There are no Lua tests at all.** Three of this round's four security findings were
+  in Lua, and all three would have been caught by tests of `sanitize`, `header_for`
+  and the edit sink. The Python side has equivalents and they did catch their
+  equivalents.
+- `bin/notes-similar_test.py` is 548 lines against the 400-line rule. Pre-existing —
+  it was 577 before this work and the cluster suites were split back out — but it
+  wants breaking up properly.
+- Louvain takes 9.6s on a pathological 3,035-note vault (average degree 200); the
+  picker now passes a 30s timeout, which bounds the freeze rather than removing it.
 - Embedding-model swap (`bge-m3`) still unscheduled, not closed.
-- `master` is now **8 commits ahead of `origin/master`**, unpushed.
+- `master` is now **9 commits ahead of `origin/master`**, unpushed.
