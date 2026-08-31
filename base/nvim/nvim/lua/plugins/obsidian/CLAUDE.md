@@ -48,8 +48,12 @@ Cluster-level cases, for the community detection in `notes_cluster.py`:
 - **A bridge.** `bridge-note` is the sole path between all three — an
   articulation point, and the structural-hole case that cluster-crossing
   ranking exists to find.
-- **A cluster with no hub.** `hubless-one`..`hubless-four` form a ring where
-  every note has roughly the same degree, so none reads as an entry point.
+- **A cluster with no hub.** `hubless-one`..`hubless-eight` form a ring where
+  every note has degree 2, so no note links to enough of the cluster to be its
+  entry point (`notes-graph` reports coverage 2/7). **The ring is eight notes
+  for a reason:** below about six, any cluster cohesive enough for Louvain to
+  keep whole is small enough that some note covers half of it, so there is
+  nothing to report. A shorter ring also splits into arcs. Don't shrink it.
 - **A disconnected component.** `island-one`..`island-three` have no path to
   the rest of the vault — a component, as opposed to the single-note orphan.
 
@@ -63,4 +67,5 @@ or any other non-note file: every `.md` file here is scanned by the tools, so
 one that isn't a note skews their output. When you add notes, keep the
 existing fixtures' degrees and dead links intact (adding an inbound link to
 `hub-note` is safe; adding one to a note documented as sparse is not) and
-update this section.
+update this section. Adding links inside the harbour ring would give it an
+entry point and silently disarm the missing-hub fixture.

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Find orphan and sparsely-connected notes in a wikilink-based markdown vault."""
+"""Find orphan and sparsely-connected notes, and link communities with no hub, in a vault."""
 
 import argparse
 import json
@@ -38,6 +38,35 @@ def classify(graph, min_links):
     return orphans, sparse
 
 
+def hubless_clusters(neighbors, labels, min_coverage, vault):
+    """Clusters no note links to enough of to serve as their entry point."""
+    hubless = []
+    for entry in notes_cluster.cluster_entry_points(neighbors, labels):
+        if entry["coverage"] >= min_coverage:
+            continue
+        path = entry["entry_point"]
+        hubless.append(
+            dict(
+                entry,
+                name=os.path.splitext(os.path.basename(path))[0],
+                rel=os.path.relpath(path, vault),
+            )
+        )
+    return hubless
+
+
+def format_hubless(entries):
+    printable = notes_common.printable
+    lines = [f"Clusters without a hub ({len(entries)})"]
+    for e in entries:
+        lines.append(
+            f"  cluster {e['cluster']}  [{e['size']} notes]  "
+            f"no note reaches more than {e['reach']} of the other {e['others']}"
+        )
+        lines.append(f"      closest thing to an entry point: {printable(e['name'])}  {printable(e['rel'])}")
+    return lines
+
+
 def format_group(title, entries, vault):
     printable = notes_common.printable
     lines = [f"{title} ({len(entries)})"]
@@ -51,10 +80,15 @@ def format_group(title, entries, vault):
     return lines
 
 
-def format_text(orphans, sparse, min_links, total, vault):
-    if not orphans and not sparse:
-        return f"All {total} notes in {vault} have at least {min_links} connection(s)."
+def format_text(orphans, sparse, min_links, total, vault, hubless=(), shape=None):
+    if not orphans and not sparse and not hubless:
+        return f"All {total} notes in {vault} have at least {min_links} connection(s), and every cluster has a hub."
     lines = [f"Scanned {total} notes in {vault} (sparse threshold: < {min_links} connections)"]
+    if shape:
+        lines.append(notes_cluster.describe_shape(shape))
+    if hubless:
+        lines.append("")
+        lines += format_hubless(hubless)
     if orphans:
         lines.append("")
         lines += format_group("Orphans", orphans, vault)
@@ -64,12 +98,14 @@ def format_text(orphans, sparse, min_links, total, vault):
     return "\n".join(lines)
 
 
-def format_json(orphans, sparse, min_links, total, vault):
+def format_json(orphans, sparse, min_links, total, vault, hubless=(), shape=None):
     return json.dumps(
         {
             "vault": vault,
             "min_links": min_links,
             "total_notes": total,
+            "shape": shape,
+            "hubless_clusters": list(hubless),
             "orphans": orphans,
             "sparse": sparse,
         },
@@ -86,6 +122,12 @@ def parse_args(argv):
         help="Path to the notes vault; required, or set $NOTES_VAULT",
     )
     parser.add_argument("-m", "--min-links", type=int, default=3, help="Notes below this connection count are 'sparse' (default: 3)")
+    parser.add_argument(
+        "--hub-reach",
+        type=float,
+        default=0.5,
+        help="A cluster has a hub if one note links to at least this share of it (default: 0.5)",
+    )
     parser.add_argument("--json", action="store_true", help="Emit JSON instead of a text report")
     parser.add_argument(
         "--exclude",
@@ -100,6 +142,8 @@ def parse_args(argv):
 def main(argv=None):
     args = parse_args(argv)
     try:
+        if not 0 < args.hub_reach <= 1:
+            raise ValueError(f"--hub-reach must be above 0 and at most 1, got {args.hub_reach}")
         vault_spec = notes_common.require_vault(args.vault)
     except ValueError as exc:
         print(f"notes-graph: {exc}", file=sys.stderr)
@@ -115,10 +159,15 @@ def main(argv=None):
     graph = notes_cluster.build_graph(files, name_index)
     orphans, sparse = classify(graph, args.min_links)
 
+    neighbors = notes_cluster.adjacency(graph)
+    labels = notes_cluster.louvain(neighbors)
+    shape = notes_cluster.shape(neighbors, labels)
+    hubless = hubless_clusters(neighbors, labels, args.hub_reach, vault)
+
     if args.json:
-        print(format_json(orphans, sparse, args.min_links, len(files), vault))
+        print(format_json(orphans, sparse, args.min_links, len(files), vault, hubless, shape))
     else:
-        print(format_text(orphans, sparse, args.min_links, len(files), vault))
+        print(format_text(orphans, sparse, args.min_links, len(files), vault, hubless, shape))
     return 0
 
 

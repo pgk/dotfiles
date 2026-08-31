@@ -59,6 +59,52 @@ def build_graph(files, name_index):
     return {path: {"neighbors": neighbors[path], "broken_links": broken[path]} for path in files}
 
 
+def adjacency(graph):
+    """The plain {path: set(path)} map community detection consumes."""
+    return {path: set(entry["neighbors"]) for path, entry in graph.items()}
+
+
+def cluster_entry_points(neighbors, labels):
+    """Per cluster: the note reaching most of it, and what share that is.
+
+    `coverage` answers "is there a way into this group?" — the fraction of a
+    cluster's other notes reachable in one hop from its best-connected member.
+    A map of content scores 1.0 because it links to everything it indexes.
+
+    The measure is deliberately scale-sensitive: a small cluster cannot help but
+    have high coverage, so only groups too large for any one note to index score
+    low. That is what keeps a missing-hub report from flooding with three-note
+    clusters that need no map of content. A one-note cluster scores 1.0 by
+    convention — it is trivially its own entry point, and orphan detection
+    already covers it.
+    """
+    members = {}
+    for node, cluster_id in labels.items():
+        members.setdefault(cluster_id, []).append(node)
+    report = []
+    for cluster_id, group in members.items():
+        group = sorted(group)
+        inside = set(group)
+        best, reach = group[0], 0
+        for node in group:
+            hit = len(neighbors.get(node, set()) & inside)
+            if hit > reach:
+                best, reach = node, hit
+        others = len(group) - 1
+        report.append(
+            {
+                "cluster": cluster_id,
+                "size": len(group),
+                "entry_point": best,
+                "reach": reach,
+                "others": others,
+                "coverage": round(reach / others, 4) if others else 1.0,
+            }
+        )
+    report.sort(key=lambda c: (-c["size"], c["cluster"]))
+    return report
+
+
 def components(neighbors):
     """Connected components, each a sorted node list. Largest first, then alphabetical."""
     seen = set()

@@ -22,7 +22,7 @@ This document describes the custom Obsidian integration for Neovim, built on top
 | `<leader>of` | `:ObsidianLinks` | Forward links in picker |
 | `<leader>ot` | `:ObsidianTransclusionToggle` | Toggle transclusion rendering |
 | `<leader>oR` | `:ObsidianRename` | Rename note and update all links |
-| `<leader>og` | `:ObsidianGraphHealth` | Find orphan and sparsely-connected notes |
+| `<leader>og` | `:ObsidianGraphHealth` | Find orphans, sparse notes, and clusters with no hub |
 | `<leader>oD` | `:ObsidianDeadLinks` | Find dead links and possible matches |
 | `<leader>oS` | `:ObsidianSimilar` | Find semantically similar but unlinked notes |
 
@@ -58,7 +58,7 @@ This document describes the custom Obsidian integration for Neovim, built on top
 | `:ObsidianTransclusionToggle` | Toggle inline transclusion rendering |
 | `:ObsidianRename [name]` | Rename current note and update all links |
 | `:ObsidianDaily [offset]` | Open daily note with template (offset: -1 = yesterday) |
-| `:ObsidianGraphHealth` | Find orphan and sparsely-connected notes (picker) |
+| `:ObsidianGraphHealth` | Find orphans, sparse notes, and clusters with no hub (picker) |
 | `:ObsidianDeadLinks` | Find dead links and possible matches (picker) |
 | `:ObsidianSimilar` | Find semantically similar but unlinked notes (picker) |
 | `:ObsidianSimilarIndex[!]` | Refresh the embedding index in the background (`!` rebuilds from scratch) |
@@ -112,12 +112,25 @@ Use `<leader>oR` or `:ObsidianRename` to rename the current note:
 
 ## Graph Health
 
-Use `<leader>og` or `:ObsidianGraphHealth` to find notes that are disconnected or
-weakly connected from the rest of the vault:
-- Backed by the `notes-graph` CLI tool (`bin/notes-graph` in dotfiles)
-- Orphans have zero `[[links]]` in or out; sparse notes are below the connection
-  threshold (default: 3, see `notes-graph --help`)
-- Results open in an fzf-lua picker; select one to jump to that note
+Use `<leader>og` or `:ObsidianGraphHealth` to find structural problems in the
+vault, at two levels:
+- Backed by the `notes-graph` CLI tool (`bin/notes-graph` in dotfiles). It reads
+  only the link graph — no embedding server, no network
+- **Per note:** orphans have zero `[[links]]` in or out; sparse notes are below
+  the connection threshold (default: 3, see `notes-graph --help`)
+- **Per cluster:** `[NO HUB]` rows are link communities that no note links to
+  enough of to serve as a way in. That is an actionable "write a map of content
+  here". A note that indexes its cluster reaches all of it; the threshold is half
+  (`--hub-reach`). Small clusters are never reported, because you cannot help but
+  reach most of a four-note group — the finding only becomes real at a size where
+  no single note can index the group
+- Hubless clusters are listed first, since a few of them would otherwise be
+  buried under hundreds of sparse notes. Selecting one opens the note that comes
+  closest to being its entry point — the one you would promote, or write beside
+- The picker header states the graph it ran on: components, cluster count and
+  modularity. Many tiny components, or a modularity near zero, means there are no
+  real clusters and the `[NO HUB]` rows are noise
+- Select any row to jump to that note
 
 ## Dead Links
 

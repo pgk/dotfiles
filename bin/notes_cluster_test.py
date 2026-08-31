@@ -39,6 +39,9 @@ TWO_TRIANGLES = undirected(
 )
 
 
+HARBOUR_RING = ("one", "two", "three", "four", "five", "six", "seven", "eight")
+
+
 def grouping(labels):
     """Labels as a set of frozensets, so tests assert on the partition, not on ids."""
     groups = {}
@@ -101,6 +104,67 @@ class AdjacencyFromLinksTests(unittest.TestCase):
         entries = [{"path": "/v/a.md", "links": ["a"]}]
         index = {"a": "/v/a.md"}
         self.assertEqual(notes_cluster.adjacency_from_links(entries, index), {"/v/a.md": set()})
+
+
+class ClusterEntryPointTests(unittest.TestCase):
+    """Coverage: the share of a cluster its best-connected note reaches in one hop."""
+
+    def entries(self, graph, labels=None):
+        return notes_cluster.cluster_entry_points(graph, labels or notes_cluster.louvain(graph))
+
+    def test_a_map_of_content_covers_its_whole_cluster(self):
+        graph = undirected([("moc", n) for n in ("a", "b", "c", "d")])
+        entry = self.entries(graph, dict.fromkeys(graph, 0))[0]
+        self.assertEqual((entry["entry_point"], entry["reach"], entry["coverage"]), ("moc", 4, 1.0))
+
+    def test_a_ring_has_no_note_that_covers_it(self):
+        ring = [(f"n{i}", f"n{(i + 1) % 8}") for i in range(8)]
+        entry = self.entries(undirected(ring), dict.fromkeys([f"n{i}" for i in range(8)], 0))[0]
+        self.assertEqual(entry["reach"], 2)
+        self.assertAlmostEqual(entry["coverage"], 2 / 7, places=3)
+
+    def test_coverage_is_measured_inside_the_cluster_only(self):
+        # `outsider` gives `a` a high raw degree, but it is in another cluster and
+        # must not count toward covering this one.
+        graph = undirected([("a", "b"), ("a", "outsider"), ("b", "c"), ("c", "a")])
+        labels = {"a": 0, "b": 0, "c": 0, "outsider": 1}
+        entry = next(e for e in self.entries(graph, labels) if e["cluster"] == 0)
+        self.assertEqual((entry["reach"], entry["others"], entry["coverage"]), (2, 2, 1.0))
+
+    def test_a_lone_note_is_its_own_entry_point(self):
+        graph = undirected([], isolated=["z"])
+        entry = self.entries(graph)[0]
+        self.assertEqual((entry["size"], entry["coverage"], entry["entry_point"]), (1, 1.0, "z"))
+
+    def test_every_cluster_is_reported_exactly_once(self):
+        graph = undirected([("a", "b"), ("c", "d")], isolated=["z"])
+        labels = notes_cluster.louvain(graph)
+        entries = self.entries(graph, labels)
+        self.assertEqual(len(entries), len(set(labels.values())))
+        self.assertEqual(sorted(e["cluster"] for e in entries), sorted(set(labels.values())))
+
+    def test_largest_cluster_is_reported_first(self):
+        graph = undirected([("a", "b"), ("b", "c"), ("a", "c"), ("y", "z")])
+        self.assertEqual([e["size"] for e in self.entries(graph)], [3, 2])
+
+    def test_ties_resolve_to_the_first_note_in_sorted_order(self):
+        ring = undirected([("b", "c"), ("c", "d"), ("d", "b")])
+        entry = self.entries(ring, dict.fromkeys(ring, 0))[0]
+        self.assertEqual(entry["entry_point"], "b")
+
+    def test_empty_vault(self):
+        self.assertEqual(notes_cluster.cluster_entry_points({}, {}), [])
+
+
+class AdjacencyTests(unittest.TestCase):
+    def test_drops_everything_but_neighbours(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write_vault(tmp, {"a.md": "[[b]] [[ghost]]", "b.md": ""})
+            paths = list(notes_common.iter_markdown_files(tmp, []))
+            graph = notes_cluster.build_graph(paths, notes_common.build_name_index(paths))
+            neighbors = notes_cluster.adjacency(graph)
+        self.assertEqual({Path(p).stem for p in neighbors}, {"a", "b"})
+        self.assertTrue(all(isinstance(v, set) for v in neighbors.values()))
 
 
 class ComponentsTests(unittest.TestCase):
@@ -304,7 +368,7 @@ class DevVaultFixtureTests(unittest.TestCase):
         # hold if clustering degenerated to one singleton per note.
         planning = {self.cluster_of(n) for n in ("hub-note", "project-plan", "meeting-notes", "reading-list")}
         gardening = {self.cluster_of(f"cluster-b-{n}") for n in ("hub", "one", "two", "three")}
-        harbour = {self.cluster_of(f"hubless-{n}") for n in ("one", "two", "three", "four")}
+        harbour = {self.cluster_of(f"hubless-{n}") for n in HARBOUR_RING}
         for community in (planning, gardening, harbour):
             self.assertEqual(len(community), 1)
         self.assertEqual(len({planning.pop(), gardening.pop(), harbour.pop()}), 3)
@@ -315,8 +379,23 @@ class DevVaultFixtureTests(unittest.TestCase):
         self.assertNotIn(self.cluster_of("hub-note"), island)
 
     def test_hubless_ring_members_cluster_together(self):
-        ring = {self.cluster_of(f"hubless-{n}") for n in ("one", "two", "three", "four")}
-        self.assertEqual(len(ring), 1)
+        self.assertEqual(len({self.cluster_of(f"hubless-{n}") for n in HARBOUR_RING}), 1)
+
+    def test_the_harbour_ring_is_the_only_cluster_with_no_entry_point(self):
+        # The fixture's reason for being eight notes: below about six, any cluster
+        # cohesive enough for Louvain to keep whole is small enough that some note
+        # covers half of it, so there is nothing to report.
+        entries = notes_cluster.cluster_entry_points(self.neighbors, self.labels)
+        hubless = [e for e in entries if e["coverage"] < 0.5]
+        self.assertEqual(len(hubless), 1)
+        self.assertEqual(hubless[0]["size"], len(HARBOUR_RING))
+        self.assertEqual(Path(hubless[0]["entry_point"]).stem, "hubless-eight")
+        self.assertEqual(hubless[0]["reach"], 2)
+
+    def test_every_other_cluster_has_a_full_entry_point(self):
+        for entry in notes_cluster.cluster_entry_points(self.neighbors, self.labels):
+            if entry["size"] != len(HARBOUR_RING):
+                self.assertEqual(entry["coverage"], 1.0, Path(entry["entry_point"]).stem)
 
     def test_modularity_is_high_enough_to_be_worth_clustering(self):
         self.assertGreater(notes_cluster.modularity(self.neighbors, self.labels), 0.5)
