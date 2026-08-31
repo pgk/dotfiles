@@ -30,7 +30,7 @@ local function update_panel()
   local current_file = vim.api.nvim_buf_get_name(current_buf)
 
   -- Only update for markdown files in vault
-  if not current_file:match("%.md$") or not current_file:match(vim.fn.expand("~/notes")) then
+  if not current_file:match("%.md$") or not vim.startswith(current_file, utils.vault_path .. "/") then
     vim.api.nvim_buf_set_option(M.state.buf, "modifiable", true)
     vim.api.nvim_buf_set_lines(M.state.buf, 0, -1, false, { "  Not in vault" })
     vim.api.nvim_buf_set_option(M.state.buf, "modifiable", false)
@@ -123,16 +123,11 @@ local function open_link_under_cursor()
     return
   end
   -- Find the file
-  local handle = io.popen('find "' .. utils.vault_path .. '" -iname "' .. link .. '.md" -type f | head -1')
-  if not handle then
-    return
-  end
-  local result = handle:read("*a"):gsub("\n", "")
-  handle:close()
-  if result ~= "" then
+  local found = utils.find_note_file(link)
+  if found then
     -- Focus previous window and open file
     vim.cmd("wincmd p")
-    vim.cmd("edit " .. vim.fn.fnameescape(result))
+    vim.cmd("edit " .. vim.fn.fnameescape(found))
   else
     vim.notify("Note not found: " .. link, vim.log.levels.WARN)
   end

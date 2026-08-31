@@ -4,18 +4,7 @@ local utils = require("plugins.obsidian.utils")
 local M = {}
 
 function M.random()
-  local handle = io.popen('find "' .. utils.vault_path .. '" -name "*.md" -type f')
-  if not handle then
-    vim.notify("Failed to search vault", vim.log.levels.ERROR)
-    return
-  end
-  local result = handle:read("*a")
-  handle:close()
-
-  local files = {}
-  for file in result:gmatch("[^\n]+") do
-    table.insert(files, file)
-  end
+  local files = utils.list_note_files()
 
   if #files == 0 then
     vim.notify("No notes found in vault", vim.log.levels.WARN)
@@ -52,6 +41,54 @@ function M.insert_link()
   })
 end
 
+-- Rewrite [[old_name]] / [[old_name|alias]] links to new_name (case-insensitive).
+-- Returns true if the file was changed.
+local function rewrite_links(filepath, old_name, new_name)
+  local file = io.open(filepath, "r")
+  if not file then
+    return false
+  end
+  local content = file:read("*a")
+  file:close()
+
+  local new_content = content:gsub("%[%[([^%]|]+)%]%]", function(match)
+    if match:lower() == old_name:lower() then
+      return "[[" .. new_name .. "]]"
+    end
+    return "[[" .. match .. "]]"
+  end)
+  new_content = new_content:gsub("%[%[([^%]|]+)|", function(match)
+    if match:lower() == old_name:lower() then
+      return "[[" .. new_name .. "|"
+    end
+    return "[[" .. match .. "|"
+  end)
+
+  if new_content == content then
+    return false
+  end
+  local out_file = io.open(filepath, "w")
+  if not out_file then
+    return false
+  end
+  out_file:write(new_content)
+  out_file:close()
+  return true
+end
+
+-- Rename `id: old_name` to `id: new_name` in the current buffer's frontmatter, if present.
+local function update_frontmatter_id(old_name, new_name)
+  local buf_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  local old_name_pattern = utils.escape_pattern(old_name)
+  for i, line in ipairs(buf_lines) do
+    if line:match("^id:%s*" .. old_name_pattern .. "$") then
+      buf_lines[i] = "id: " .. new_name
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, buf_lines)
+      return
+    end
+  end
+end
+
 function M.rename(new_name)
   local current_file = vim.api.nvim_buf_get_name(0)
   if not current_file:match("%.md$") then
@@ -80,66 +117,17 @@ function M.rename(new_name)
 
   -- Find all files that link to the old name (case-insensitive)
   local search_term = "[[" .. old_name
-  local handle = io.popen('grep -rilF -- "' .. search_term .. '" "' .. utils.vault_path .. '" --include="*.md" 2>/dev/null')
-  local files_to_update = {}
-  if handle then
-    local result = handle:read("*a")
-    handle:close()
-    for file in result:gmatch("[^\n]+") do
-      table.insert(files_to_update, file)
-    end
-  end
-
+  local files_to_update = utils.grep_note_files(search_term, { ignorecase = true })
   vim.notify("Found " .. #files_to_update .. " files with links", vim.log.levels.INFO)
 
-  -- Update links in all files (case-insensitive replace)
   local updated_count = 0
-  local old_name_escaped = utils.escape_pattern(old_name)
-
   for _, filepath in ipairs(files_to_update) do
-    local file = io.open(filepath, "r")
-    if file then
-      local content = file:read("*a")
-      file:close()
-
-      -- Replace [[old_name]] and [[old_name|alias]] (case-insensitive)
-      local new_content = content:gsub("%[%[" .. old_name_escaped .. "%]%]", "[[" .. new_name .. "]]")
-      new_content = new_content:gsub("%[%[" .. old_name_escaped .. "|", "[[" .. new_name .. "|")
-      -- Also try case-insensitive by lowercasing comparison
-      new_content = new_content:gsub("%[%[([^%]|]+)%]%]", function(match)
-        if match:lower() == old_name:lower() then
-          return "[[" .. new_name .. "]]"
-        end
-        return "[[" .. match .. "]]"
-      end)
-      new_content = new_content:gsub("%[%[([^%]|]+)|", function(match)
-        if match:lower() == old_name:lower() then
-          return "[[" .. new_name .. "|"
-        end
-        return "[[" .. match .. "|"
-      end)
-
-      if new_content ~= content then
-        local out_file = io.open(filepath, "w")
-        if out_file then
-          out_file:write(new_content)
-          out_file:close()
-          updated_count = updated_count + 1
-        end
-      end
+    if rewrite_links(filepath, old_name, new_name) then
+      updated_count = updated_count + 1
     end
   end
 
-  -- Update id: in frontmatter in the current buffer
-  local buf_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-  local old_name_pattern = old_name:gsub("%-", "%%-")
-  for i, line in ipairs(buf_lines) do
-    if line:match("^id:%s*" .. old_name_pattern .. "$") then
-      buf_lines[i] = "id: " .. new_name
-      vim.api.nvim_buf_set_lines(0, 0, -1, false, buf_lines)
-      break
-    end
-  end
+  update_frontmatter_id(old_name, new_name)
 
   -- Rename the file
   vim.cmd("write " .. vim.fn.fnameescape(new_file))
@@ -220,17 +208,18 @@ function M.smart_follow_link()
   for start_pos, link, end_pos in line:gmatch("()%[%[([^%]|]+)[^%]]*%]%]()") do
     -- Check if cursor is anywhere within [[ and ]]
     if col >= start_pos and col <= end_pos - 1 then
-      local handle = io.popen('find "' .. utils.vault_path .. '" -iname "' .. link .. '.md" -type f | head -1')
-      if handle then
-        local result = handle:read("*a"):gsub("\n", "")
-        handle:close()
-        if result ~= "" then
-          vim.cmd("edit " .. vim.fn.fnameescape(result))
-          return
-        end
+      local found = utils.find_note_file(link)
+      if found then
+        vim.cmd("edit " .. vim.fn.fnameescape(found))
+        return
       end
-      -- Note doesn't exist - create it
-      local new_file = utils.vault_path .. "/" .. link .. ".md"
+      -- Note doesn't exist - create it, but never outside the vault (a link
+      -- like [[../../etc/passwd]] must not escape via this concatenation).
+      local new_file = vim.fs.normalize(utils.vault_path .. "/" .. link .. ".md")
+      if not vim.startswith(new_file, utils.vault_path .. "/") then
+        vim.notify("Link escapes the vault: " .. link, vim.log.levels.WARN)
+        return
+      end
       vim.cmd("edit " .. vim.fn.fnameescape(new_file))
       vim.notify("Created: " .. link, vim.log.levels.INFO)
       return

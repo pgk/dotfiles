@@ -5,6 +5,9 @@
 --   transclusion.lua - Transclusion rendering
 --   daily.lua       - Daily notes with template
 --   commands.lua    - Random, insert link, rename commands
+--   graph.lua       - Orphan / sparsely-connected note detection
+
+local vault_path = require("plugins.obsidian.utils").default_vault_path
 
 return {
   "obsidian-nvim/obsidian.nvim",
@@ -23,6 +26,7 @@ return {
     local daily = require("plugins.obsidian.daily")
     local commands = require("plugins.obsidian.commands")
     local format = require("plugins.obsidian.format")
+    local graph = require("plugins.obsidian.graph")
 
     -- Setup all modules
     panel.setup()
@@ -30,13 +34,14 @@ return {
     daily.setup()
     commands.setup()
     format.setup()
+    graph.setup()
 
     -- Set up path settings and mappings for markdown
     vim.api.nvim_create_autocmd("FileType", {
       pattern = "markdown",
       callback = function()
         vim.opt_local.suffixesadd:append(".md")
-        vim.opt_local.path:append(vim.fn.expand("~/notes") .. "/**")
+        vim.opt_local.path:append(utils.vault_path .. "/**")
         -- Soft word wrap at window edge
         vim.opt_local.wrap = true
         vim.opt_local.linebreak = true
@@ -45,7 +50,7 @@ return {
         vim.opt_local.showbreak = "↳ "
         vim.opt_local.textwidth = 0 -- Don't hard wrap
         local filepath = vim.api.nvim_buf_get_name(0)
-        if filepath:find(utils.vault_path, 1, true) then
+        if vim.startswith(filepath, utils.vault_path .. "/") then
           vim.opt_local.formatexpr = "v:lua.require'plugins.obsidian.format'.formatexpr()"
         end
         vim.keymap.set("n", "gf", commands.smart_follow_link, { buffer = true, desc = "Smart follow link" })
@@ -75,12 +80,13 @@ return {
     vim.keymap.set("n", "<leader>ot", "<cmd>ObsidianTransclusionToggle<cr>", { desc = "Obsidian toggle transclusions" })
     vim.keymap.set("n", "<leader>oR", "<cmd>ObsidianRename<cr>", { desc = "Obsidian rename note" })
     vim.keymap.set("v", "<leader>oe", "<cmd>ObsidianExtract<cr>", { desc = "Obsidian extract to note" })
+    vim.keymap.set("n", "<leader>og", "<cmd>ObsidianGraphHealth<cr>", { desc = "Obsidian orphan/sparse notes" })
   end,
   opts = {
     workspaces = {
       {
         name = "notes",
-        path = "~/notes",
+        path = vault_path,
       },
     },
     completion = {

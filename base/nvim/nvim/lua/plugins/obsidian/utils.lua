@@ -1,7 +1,23 @@
 -- Shared utilities for Obsidian integration
 local M = {}
 
-M.vault_path = vim.fn.expand("~/notes")
+-- The vault path used before obsidian.nvim has an active workspace (or if it
+-- never gets one). A rawset field, not routed through the __index below.
+M.default_vault_path = vim.fn.expand("~/notes")
+
+-- M.vault_path is a computed property reading the active workspace's vault
+-- root (obsidian.nvim's Obsidian.dir), so :ObsidianWorkspace switches take
+-- effect without a restart.
+setmetatable(M, {
+  __index = function(_, key)
+    if key == "vault_path" then
+      if Obsidian and Obsidian.dir then
+        return tostring(Obsidian.dir)
+      end
+      return M.default_vault_path
+    end
+  end,
+})
 
 function M.get_note_name(filepath)
   return vim.fn.fnamemodify(filepath, ":t:r")
@@ -60,6 +76,51 @@ function M.get_backlink_context(filepath, note_name, max_len)
   return ""
 end
 
+-- Find a note file by name (case-insensitive), argv-based so link text from a
+-- note buffer can never reach a shell. -quit stops at the first match instead
+-- of walking the whole vault on every call.
+function M.find_note_file(name)
+  local result =
+    vim.system({ "find", M.vault_path, "-iname", name .. ".md", "-type", "f", "-print", "-quit" }, { text = true })
+      :wait()
+  if result.code ~= 0 then
+    vim.notify("find failed: " .. (result.stderr or ""), vim.log.levels.ERROR)
+    return nil
+  end
+  return (result.stdout or ""):match("[^\n]+")
+end
+
+-- List markdown files under the vault, argv-based for the same reason as
+-- find_note_file. opts.maxdepth / opts.name narrow the search (e.g. daily notes).
+function M.list_note_files(opts)
+  opts = opts or {}
+  local argv = { "find", M.vault_path }
+  if opts.maxdepth then
+    vim.list_extend(argv, { "-maxdepth", tostring(opts.maxdepth) })
+  end
+  vim.list_extend(argv, { "-name", opts.name or "*.md", "-type", "f" })
+  local result = vim.system(argv, { text = true }):wait()
+  if result.code ~= 0 then
+    vim.notify("find failed: " .. (result.stderr or ""), vim.log.levels.ERROR)
+    return {}
+  end
+  return vim.split(result.stdout or "", "\n", { trimempty = true })
+end
+
+-- Find notes containing `search_term` (fixed string), argv-based for the same
+-- reason as find_note_file. grep exits 1 for "no match" (not an error).
+function M.grep_note_files(search_term, opts)
+  opts = opts or {}
+  local flags = opts.ignorecase and "-rilF" or "-rlF"
+  local result =
+    vim.system({ "grep", flags, "--include=*.md", "--", search_term, M.vault_path }, { text = true }):wait()
+  if result.code > 1 then
+    vim.notify("grep failed: " .. (result.stderr or ""), vim.log.levels.ERROR)
+    return {}
+  end
+  return vim.split(result.stdout or "", "\n", { trimempty = true })
+end
+
 function M.get_forward_links(filepath)
   local links = {}
   local seen = {}
@@ -74,17 +135,7 @@ function M.get_forward_links(filepath)
   for link in content:gmatch("%[%[([^%]|]+)") do
     if not seen[link] then
       seen[link] = true
-      -- Find the actual file path
-      local handle = io.popen('find "' .. M.vault_path .. '" -iname "' .. link .. '.md" -type f | head -1')
-      if handle then
-        local path = handle:read("*a"):gsub("\n", "")
-        handle:close()
-        if path ~= "" then
-          table.insert(links, { name = link, path = path })
-        else
-          table.insert(links, { name = link, path = nil })
-        end
-      end
+      table.insert(links, { name = link, path = M.find_note_file(link) })
     end
   end
 
@@ -98,14 +149,9 @@ function M.get_backlinks(filepath)
 
   -- Search for [[note_name using fixed string (matches [[note]] and [[note|alias]])
   local search_term = "[[" .. note_name
-  local handle = io.popen('grep -rlF -- "' .. search_term .. '" "' .. M.vault_path .. '" --include="*.md" 2>/dev/null')
-  if not handle then
-    return backlinks
-  end
-  local result = handle:read("*a")
-  handle:close()
+  local result = M.grep_note_files(search_term)
 
-  for file in result:gmatch("[^\n]+") do
+  for _, file in ipairs(result) do
     if file ~= filepath then
       table.insert(backlinks, { name = M.get_note_name(file), path = file })
     end

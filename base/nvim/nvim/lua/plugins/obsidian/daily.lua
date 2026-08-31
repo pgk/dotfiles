@@ -5,14 +5,10 @@ local M = {}
 
 local function find_previous_daily_note(today_str)
   -- Find all daily notes (YYYY-MM-DD.md pattern)
-  local handle = io.popen('find "' .. utils.vault_path .. '" -maxdepth 1 -name "????-??-??.md" -type f | sort -r')
-  if not handle then
-    return nil
-  end
-  local result = handle:read("*a")
-  handle:close()
+  local files = utils.list_note_files({ maxdepth = 1, name = "????-??-??.md" })
+  table.sort(files, function(a, b) return a > b end)
 
-  for file in result:gmatch("[^\n]+") do
+  for _, file in ipairs(files) do
     local date_str = vim.fn.fnamemodify(file, ":t:r")
     if date_str < today_str then
       return date_str
@@ -22,16 +18,9 @@ local function find_previous_daily_note(today_str)
 end
 
 local function get_random_review_notes(today_str, count)
-  local handle = io.popen('find "' .. utils.vault_path .. '" -name "*.md" -type f')
-  if not handle then
-    return {}
-  end
-  local result = handle:read("*a")
-  handle:close()
-
   local files = {}
   local today_filename = today_str .. ".md"
-  for file in result:gmatch("[^\n]+") do
+  for _, file in ipairs(utils.list_note_files()) do
     local filename = vim.fn.fnamemodify(file, ":t")
     if filename ~= today_filename then
       table.insert(files, file)
@@ -101,13 +90,7 @@ function M.add_review()
   local daily_note_path = utils.vault_path .. "/" .. today .. ".md"
 
   -- Get all markdown files
-  local handle = io.popen('find "' .. utils.vault_path .. '" -name "*.md" -type f')
-  if not handle then
-    vim.notify("Failed to search vault", vim.log.levels.ERROR)
-    return
-  end
-  local result = handle:read("*a")
-  handle:close()
+  local all_files = utils.list_note_files()
 
   -- Get existing links in daily note to avoid duplicates
   local existing_links = {}
@@ -122,7 +105,7 @@ function M.add_review()
 
   local files = {}
   local today_filename = today .. ".md"
-  for file in result:gmatch("[^\n]+") do
+  for _, file in ipairs(all_files) do
     local filename = vim.fn.fnamemodify(file, ":t")
     local note_name = vim.fn.fnamemodify(file, ":t:r")
     -- Exclude today's daily note and already linked notes

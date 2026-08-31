@@ -17,14 +17,8 @@ local function setup_highlights()
 end
 
 local function get_content(note_name)
-  local handle = io.popen('find "' .. utils.vault_path .. '" -iname "' .. note_name .. '.md" -type f | head -1')
-  if not handle then
-    return nil
-  end
-  local filepath = handle:read("*a"):gsub("\n", "")
-  handle:close()
-
-  if filepath == "" then
+  local filepath = utils.find_note_file(note_name)
+  if not filepath then
     return nil
   end
 
@@ -113,15 +107,8 @@ function M.debug()
     if note_name then
       table.insert(output, "")
       table.insert(output, "Line " .. i .. ": Found transclusion to '" .. note_name .. "'")
-      -- Debug the find command
-      local cmd = 'find "' .. utils.vault_path .. '" -iname "' .. note_name .. '.md" -type f'
-      table.insert(output, "  Command: " .. cmd)
-      local handle = io.popen(cmd .. " 2>&1")
-      if handle then
-        local result = handle:read("*a")
-        handle:close()
-        table.insert(output, "  Find result: '" .. result:gsub("\n", " ") .. "'")
-      end
+      local found = utils.find_note_file(note_name)
+      table.insert(output, "  Find result: '" .. (found or "<not found>") .. "'")
       local content = get_content(note_name)
       if content then
         table.insert(output, "  Content: " .. #content .. " lines")

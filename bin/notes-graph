@@ -1,0 +1,177 @@
+#!/usr/bin/env python3
+
+"""Find orphan and sparsely-connected notes in a wikilink-based markdown vault."""
+
+import argparse
+import fnmatch
+import json
+import os
+import re
+import sys
+
+WIKILINK_RE = re.compile(r"\[\[([^\]|]+)")
+
+
+def iter_markdown_files(vault, excludes):
+    vault_real = os.path.realpath(vault)
+    for root, dirs, files in os.walk(vault):
+        dirs[:] = sorted(d for d in dirs if not d.startswith("."))
+        for name in sorted(files):
+            if not name.endswith(".md"):
+                continue
+            path = os.path.join(root, name)
+            if not os.path.realpath(path).startswith(vault_real + os.sep):
+                continue
+            rel = os.path.relpath(path, vault)
+            if any(fnmatch.fnmatch(rel, pattern) for pattern in excludes):
+                continue
+            yield path
+
+
+def build_name_index(files):
+    index = {}
+    for path in files:
+        stem = os.path.splitext(os.path.basename(path))[0].lower()
+        if stem in index:
+            print(f"warning: duplicate note name '{stem}', keeping {index[stem]}", file=sys.stderr)
+            continue
+        index[stem] = path
+    return index
+
+
+def extract_links(text):
+    links = []
+    for raw in WIKILINK_RE.findall(text):
+        target = raw.split("#", 1)[0].strip()
+        target = os.path.basename(target.replace("\\", "/"))
+        if target:
+            links.append(target)
+    return links
+
+
+def resolve_link(link_text, name_index):
+    if link_text.lower().endswith(".md"):
+        link_text = link_text[:-3]
+    return name_index.get(link_text.lower())
+
+
+def build_graph(files, name_index):
+    graph = {path: {"neighbors": set(), "broken_links": []} for path in files}
+    for path in files:
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                text = f.read()
+        except OSError as exc:
+            print(f"warning: skipping unreadable note {path}: {exc}", file=sys.stderr)
+            continue
+        for link_text in extract_links(text):
+            target = resolve_link(link_text, name_index)
+            if target is None:
+                graph[path]["broken_links"].append(link_text)
+            elif target != path:
+                graph[path]["neighbors"].add(target)
+                graph[target]["neighbors"].add(path)
+    return graph
+
+
+def note_entry(path, graph):
+    return {
+        "name": os.path.splitext(os.path.basename(path))[0],
+        "path": path,
+        "degree": len(graph[path]["neighbors"]),
+        "broken_links": sorted(set(graph[path]["broken_links"])),
+    }
+
+
+def classify(graph, min_links):
+    orphans = []
+    sparse = []
+    for path in graph:
+        entry = note_entry(path, graph)
+        if entry["degree"] == 0:
+            orphans.append(entry)
+        elif entry["degree"] < min_links:
+            sparse.append(entry)
+    def sort_key(entry):
+        return (entry["degree"], entry["name"].lower())
+
+    orphans.sort(key=sort_key)
+    sparse.sort(key=sort_key)
+    return orphans, sparse
+
+
+def format_group(title, entries, vault):
+    lines = [f"{title} ({len(entries)})"]
+    for e in entries:
+        rel = os.path.relpath(e["path"], vault)
+        plural = "link" if e["degree"] == 1 else "links"
+        line = f"  {e['name']}  [{e['degree']} {plural}]  {rel}"
+        if e["broken_links"]:
+            line += "  (broken: " + ", ".join(f"[[{b}]]" for b in e["broken_links"]) + ")"
+        lines.append(line)
+    return lines
+
+
+def format_text(orphans, sparse, min_links, total, vault):
+    if not orphans and not sparse:
+        return f"All {total} notes in {vault} have at least {min_links} connection(s)."
+    lines = [f"Scanned {total} notes in {vault} (sparse threshold: < {min_links} connections)"]
+    if orphans:
+        lines.append("")
+        lines += format_group("Orphans", orphans, vault)
+    if sparse:
+        lines.append("")
+        lines += format_group("Sparse", sparse, vault)
+    return "\n".join(lines)
+
+
+def format_json(orphans, sparse, min_links, total, vault):
+    return json.dumps(
+        {
+            "vault": vault,
+            "min_links": min_links,
+            "total_notes": total,
+            "orphans": orphans,
+            "sparse": sparse,
+        },
+        indent=2,
+    )
+
+
+def parse_args(argv):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("vault", nargs="?", default="~/notes", help="Path to the notes vault (default: ~/notes)")
+    parser.add_argument("-m", "--min-links", type=int, default=3, help="Notes below this connection count are 'sparse' (default: 3)")
+    parser.add_argument("--json", action="store_true", help="Emit JSON instead of a text report")
+    parser.add_argument(
+        "--exclude",
+        action="append",
+        metavar="GLOB",
+        default=None,
+        help="Glob pattern, relative to vault, to exclude from the scan (repeatable)",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
+    args = parse_args(argv)
+    vault = os.path.abspath(os.path.expanduser(args.vault))
+
+    if not os.path.isdir(vault):
+        print(f"notes-graph: not a directory: {vault}", file=sys.stderr)
+        return 1
+
+    files = list(iter_markdown_files(vault, args.exclude or []))
+    name_index = build_name_index(files)
+    graph = build_graph(files, name_index)
+    orphans, sparse = classify(graph, args.min_links)
+
+    if args.json:
+        print(format_json(orphans, sparse, args.min_links, len(files), vault))
+    else:
+        print(format_text(orphans, sparse, args.min_links, len(files), vault))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
