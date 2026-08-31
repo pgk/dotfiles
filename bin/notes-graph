@@ -63,7 +63,9 @@ def format_hubless(entries):
             f"  cluster {e['cluster']}  [{e['size']} notes]  "
             f"no note reaches more than {e['reach']} of the other {e['others']}"
         )
-        lines.append(f"      closest thing to an entry point: {printable(e['name'])}  {printable(e['rel'])}")
+        # Named, not ranked: in a ring every member ties, so this is the first of
+        # several equals as often as it is a standout.
+        lines.append(f"      best connected: {printable(e['name'])}  {printable(e['rel'])}")
     return lines
 
 
@@ -126,7 +128,7 @@ def parse_args(argv):
         "--hub-reach",
         type=float,
         default=0.5,
-        help="A cluster has a hub if one note links to at least this share of it (default: 0.5)",
+        help="A cluster has a hub if one note links to at least this share of it; 0 < value <= 1 (default: 0.5)",
     )
     parser.add_argument("--json", action="store_true", help="Emit JSON instead of a text report")
     parser.add_argument(

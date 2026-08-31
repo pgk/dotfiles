@@ -50,10 +50,14 @@ Cluster-level cases, for the community detection in `notes_cluster.py`:
   ranking exists to find.
 - **A cluster with no hub.** `hubless-one`..`hubless-eight` form a ring where
   every note has degree 2, so no note links to enough of the cluster to be its
-  entry point (`notes-graph` reports coverage 2/7). **The ring is eight notes
-  for a reason:** below about six, any cluster cohesive enough for Louvain to
-  keep whole is small enough that some note covers half of it, so there is
-  nothing to report. A shorter ring also splits into arcs. Don't shrink it.
+  entry point (`notes-graph` reports coverage 2/7). **Don't shrink the ring**,
+  for three measured reasons: six is the arithmetic minimum, because a five-note
+  cluster scores exactly 0.5 and is spared by the `>=` in `hubless_clusters`;
+  seven makes Louvain pull `bridge-note` in, so the reported size stops matching
+  the ring length and the assertions get confusing; and eight scores 0.286
+  rather than 0.4, which is margin against the clustering shifting slightly.
+  (Rings of four through eight all survive Louvain here — a *bare* ring splits
+  into arcs, but this one has a denser neighbour, which changes that.)
 - **A disconnected component.** `island-one`..`island-three` have no path to
   the rest of the vault — a component, as opposed to the single-note orphan.
 

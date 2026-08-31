@@ -3,14 +3,7 @@ local utils = require("plugins.obsidian.utils")
 
 local M = {}
 
--- Note names, previews and paths come from note content, not from nvim itself;
--- strip control chars so a crafted note can't split one entry into several
--- picker rows with mismatched path_by_line keys, and so a name containing a
--- newline can't make nvim_put throw when inserted as a link. Same reason as
--- deadlinks.lua.
-local function sanitize(s)
-  return (tostring(s or ""):gsub("%c", " "))
-end
+local sanitize = utils.sanitize
 
 local function describe(entry, vault)
   local rel = sanitize(entry.path:gsub("^" .. vim.pesc(vault) .. "/", ""))
@@ -58,10 +51,7 @@ local function open_picker(result, vault, origin)
         if not selected or #selected == 0 then
           return
         end
-        local path = path_by_line[selected[1]]
-        if path then
-          vim.cmd("edit " .. vim.fn.fnameescape(path))
-        end
+        utils.edit(path_by_line[selected[1]])
       end,
       ["ctrl-y"] = function(selected)
         if not selected or #selected == 0 then

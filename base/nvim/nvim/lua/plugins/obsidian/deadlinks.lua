@@ -24,15 +24,10 @@ local function run_notes_deadlinks()
   return decoded
 end
 
--- Link text and candidate names come from note content, not from nvim itself;
--- strip control chars so a crafted [[link\nwith\nnewlines]] can't split one
--- dead-link entry into several picker rows with mismatched path_by_line keys.
-local function sanitize(s)
-  return (s:gsub("%c", " "))
-end
+local sanitize = utils.sanitize
 
 local function describe(note, dead_link, vault)
-  local rel = note.path:gsub("^" .. vim.pesc(vault) .. "/", "")
+  local rel = sanitize(note.path:gsub("^" .. vim.pesc(vault) .. "/", ""))
   local suffix = #dead_link.candidates > 0 and ("possible: " .. table.concat(dead_link.candidates, ", ")) or "no matches"
   return string.format(
     "%-30s [[%s]]  %s  %s",
@@ -71,10 +66,7 @@ function M.check_dead_links()
         if not selected or #selected == 0 then
           return
         end
-        local path = path_by_line[selected[1]]
-        if path then
-          vim.cmd("edit " .. vim.fn.fnameescape(path))
-        end
+        utils.edit(path_by_line[selected[1]])
       end,
     },
   })

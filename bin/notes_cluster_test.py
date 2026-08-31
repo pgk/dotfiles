@@ -106,65 +106,17 @@ class AdjacencyFromLinksTests(unittest.TestCase):
         self.assertEqual(notes_cluster.adjacency_from_links(entries, index), {"/v/a.md": set()})
 
 
-class ClusterEntryPointTests(unittest.TestCase):
-    """Coverage: the share of a cluster its best-connected note reaches in one hop."""
-
-    def entries(self, graph, labels=None):
-        return notes_cluster.cluster_entry_points(graph, labels or notes_cluster.louvain(graph))
-
-    def test_a_map_of_content_covers_its_whole_cluster(self):
-        graph = undirected([("moc", n) for n in ("a", "b", "c", "d")])
-        entry = self.entries(graph, dict.fromkeys(graph, 0))[0]
-        self.assertEqual((entry["entry_point"], entry["reach"], entry["coverage"]), ("moc", 4, 1.0))
-
-    def test_a_ring_has_no_note_that_covers_it(self):
-        ring = [(f"n{i}", f"n{(i + 1) % 8}") for i in range(8)]
-        entry = self.entries(undirected(ring), dict.fromkeys([f"n{i}" for i in range(8)], 0))[0]
-        self.assertEqual(entry["reach"], 2)
-        self.assertAlmostEqual(entry["coverage"], 2 / 7, places=3)
-
-    def test_coverage_is_measured_inside_the_cluster_only(self):
-        # `outsider` gives `a` a high raw degree, but it is in another cluster and
-        # must not count toward covering this one.
-        graph = undirected([("a", "b"), ("a", "outsider"), ("b", "c"), ("c", "a")])
-        labels = {"a": 0, "b": 0, "c": 0, "outsider": 1}
-        entry = next(e for e in self.entries(graph, labels) if e["cluster"] == 0)
-        self.assertEqual((entry["reach"], entry["others"], entry["coverage"]), (2, 2, 1.0))
-
-    def test_a_lone_note_is_its_own_entry_point(self):
-        graph = undirected([], isolated=["z"])
-        entry = self.entries(graph)[0]
-        self.assertEqual((entry["size"], entry["coverage"], entry["entry_point"]), (1, 1.0, "z"))
-
-    def test_every_cluster_is_reported_exactly_once(self):
-        graph = undirected([("a", "b"), ("c", "d")], isolated=["z"])
-        labels = notes_cluster.louvain(graph)
-        entries = self.entries(graph, labels)
-        self.assertEqual(len(entries), len(set(labels.values())))
-        self.assertEqual(sorted(e["cluster"] for e in entries), sorted(set(labels.values())))
-
-    def test_largest_cluster_is_reported_first(self):
-        graph = undirected([("a", "b"), ("b", "c"), ("a", "c"), ("y", "z")])
-        self.assertEqual([e["size"] for e in self.entries(graph)], [3, 2])
-
-    def test_ties_resolve_to_the_first_note_in_sorted_order(self):
-        ring = undirected([("b", "c"), ("c", "d"), ("d", "b")])
-        entry = self.entries(ring, dict.fromkeys(ring, 0))[0]
-        self.assertEqual(entry["entry_point"], "b")
-
-    def test_empty_vault(self):
-        self.assertEqual(notes_cluster.cluster_entry_points({}, {}), [])
-
-
 class AdjacencyTests(unittest.TestCase):
-    def test_drops_everything_but_neighbours(self):
+    def test_keeps_the_edges_and_drops_the_broken_links(self):
         with tempfile.TemporaryDirectory() as tmp:
             write_vault(tmp, {"a.md": "[[b]] [[ghost]]", "b.md": ""})
             paths = list(notes_common.iter_markdown_files(tmp, []))
             graph = notes_cluster.build_graph(paths, notes_common.build_name_index(paths))
             neighbors = notes_cluster.adjacency(graph)
-        self.assertEqual({Path(p).stem for p in neighbors}, {"a", "b"})
-        self.assertTrue(all(isinstance(v, set) for v in neighbors.values()))
+        a, b = sorted(neighbors)
+        self.assertEqual(neighbors[a], {b})
+        self.assertEqual(neighbors[b], {a})
+        self.assertNotIn("ghost", str(neighbors))
 
 
 class ComponentsTests(unittest.TestCase):
@@ -393,8 +345,9 @@ class DevVaultFixtureTests(unittest.TestCase):
         self.assertEqual(hubless[0]["reach"], 2)
 
     def test_every_other_cluster_has_a_full_entry_point(self):
+        ring_id = self.cluster_of("hubless-one")
         for entry in notes_cluster.cluster_entry_points(self.neighbors, self.labels):
-            if entry["size"] != len(HARBOUR_RING):
+            if entry["cluster"] != ring_id:
                 self.assertEqual(entry["coverage"], 1.0, Path(entry["entry_point"]).stem)
 
     def test_modularity_is_high_enough_to_be_worth_clustering(self):

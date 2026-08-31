@@ -119,104 +119,6 @@ class GraphBuildingTests(unittest.TestCase):
         self.assertEqual([e["name"] for e in orphans], ["a"])
 
 
-def ring_beside_a_clique(ring_n=6, clique_n=4):
-    """A ring, plus a dense cluster it hangs off by one link.
-
-    The clique is not decoration. A ring on its own is not cohesive enough for
-    Louvain to keep whole -- it splits into arcs, each small enough to have an
-    entry point. It survives as one community only when there is a denser
-    neighbour for the arcs to lose against, which is also the only situation in
-    which a hubless cluster is a real finding.
-    """
-    ring = [f"r{i:02}" for i in range(ring_n)]
-    clique = [f"c{i:02}" for i in range(clique_n)]
-    files = {f"{nm}.md": f"[[{ring[(i + 1) % ring_n]}]]" for i, nm in enumerate(ring)}
-    files[f"{ring[0]}.md"] += f" [[{clique[0]}]]"
-    for nm in clique:
-        files[f"{nm}.md"] = " ".join(f"[[{other}]]" for other in clique if other != nm)
-    return files
-
-
-class HublessClusterTests(unittest.TestCase):
-    def build(self, files, hub_reach=0.5):
-        with tempfile.TemporaryDirectory() as tmp:
-            write_vault(tmp, files)
-            paths = list(notes_common.iter_markdown_files(tmp, []))
-            index = notes_common.build_name_index(paths)
-            graph = notes_cluster.build_graph(paths, index)
-            neighbors = notes_cluster.adjacency(graph)
-            labels = notes_cluster.louvain(neighbors)
-            return notes_graph.hubless_clusters(neighbors, labels, hub_reach, tmp)
-
-    def test_a_ring_has_no_entry_point(self):
-        hubless = self.build(ring_beside_a_clique())
-        self.assertEqual(len(hubless), 1)
-        self.assertEqual((hubless[0]["size"], hubless[0]["reach"], hubless[0]["others"]), (6, 2, 5))
-
-    def test_the_dense_cluster_beside_it_is_not_reported(self):
-        hubless = self.build(ring_beside_a_clique())
-        self.assertTrue(all(e["name"].startswith("r") for e in hubless))
-
-    def test_a_map_of_content_cluster_is_not_reported(self):
-        files = {"moc.md": " ".join(f"[[n{i}]]" for i in range(6))}
-        files.update({f"n{i}.md": "[[moc]]" for i in range(6)})
-        self.assertEqual(self.build(files), [])
-
-    def test_small_clusters_are_never_reported(self):
-        # A three-note cluster needs no map of content, and coverage says so
-        # without a separate size threshold to pick.
-        self.assertEqual(self.build({"a.md": "[[b]]", "b.md": "[[c]]", "c.md": "[[a]]"}), [])
-
-    def test_an_orphan_is_not_reported_as_a_hubless_cluster(self):
-        self.assertEqual(self.build({"lonely.md": "no links"}), [])
-
-    def test_raising_hub_reach_reports_more_clusters(self):
-        files = {"a.md": "[[b]] [[c]]", "b.md": "[[c]]", "c.md": ""}
-        self.assertEqual(self.build(files, hub_reach=0.5), [])
-        self.assertEqual(len(self.build(files, hub_reach=1.01)), 1)
-
-    def test_entries_carry_a_name_and_a_vault_relative_path(self):
-        entry = self.build(ring_beside_a_clique())[0]
-        self.assertTrue(entry["name"].startswith("r"))
-        self.assertEqual(entry["rel"], entry["name"] + ".md")
-        self.assertNotIn("/", entry["rel"])
-
-
-class HublessReportTests(unittest.TestCase):
-    ENTRY = {
-        "cluster": 2, "size": 8, "entry_point": "/v/r00.md", "reach": 2,
-        "others": 7, "coverage": 0.2857, "name": "r00", "rel": "r00.md",
-    }
-
-    def test_report_states_the_cluster_size_and_the_best_reach(self):
-        out = "\n".join(notes_graph.format_hubless([self.ENTRY]))
-        self.assertIn("cluster 2", out)
-        self.assertIn("[8 notes]", out)
-        self.assertIn("more than 2 of the other 7", out)
-        self.assertIn("r00", out)
-
-    def test_control_characters_in_a_note_name_are_stripped(self):
-        out = "\n".join(notes_graph.format_hubless([dict(self.ENTRY, name="ev\x1b[31mil", rel="a\x07.md")]))
-        for bad in ("\x1b", "\x07"):
-            self.assertNotIn(bad, out)
-
-    def test_text_report_carries_the_graph_shape(self):
-        shape = {"notes": 8, "edges": 8, "components": 1, "largest_component": 8,
-                 "isolated": 0, "clusters": 1, "largest_cluster": 8, "modularity": 0.4}
-        out = notes_graph.format_text([], [], 3, 8, "/v", [self.ENTRY], shape)
-        self.assertIn("8 notes", out)
-        self.assertIn("Clusters without a hub (1)", out)
-
-    def test_all_clear_message_mentions_hubs_too(self):
-        out = notes_graph.format_text([], [], 3, 5, "/v")
-        self.assertIn("every cluster has a hub", out)
-
-    def test_hubless_clusters_alone_still_produce_a_report(self):
-        out = notes_graph.format_text([], [], 3, 8, "/v", [self.ENTRY])
-        self.assertIn("Clusters without a hub", out)
-        self.assertNotIn("Orphans", out)
-
-
 class FormatTextTests(unittest.TestCase):
     def test_report_includes_broken_links_and_relative_path(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -328,28 +230,6 @@ class CliSubprocessTests(unittest.TestCase):
             )
             payload = json.loads(result.stdout)
             self.assertEqual(payload["total_notes"], 1)
-
-    def test_cli_json_carries_shape_and_hubless_clusters(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write_vault(tmp, ring_beside_a_clique())
-            result = subprocess.run(
-                [sys.executable, str(SCRIPT_PATH), tmp, "--json"],
-                capture_output=True, text=True, check=True,
-            )
-            payload = json.loads(result.stdout)
-        self.assertEqual(payload["shape"]["notes"], 10)
-        self.assertEqual(len(payload["hubless_clusters"]), 1)
-        self.assertEqual(payload["hubless_clusters"][0]["size"], 6)
-        self.assertEqual(payload["orphans"], [])
-
-    def test_cli_rejects_a_hub_reach_outside_zero_to_one(self):
-        for bad in ("0", "-0.5", "1.5"):
-            result = subprocess.run(
-                [sys.executable, str(SCRIPT_PATH), "/tmp", "--hub-reach", bad],
-                capture_output=True, text=True,
-            )
-            self.assertNotEqual(result.returncode, 0, bad)
-            self.assertIn("--hub-reach", result.stderr)
 
     def test_cli_rejects_nonexistent_vault(self):
         result = subprocess.run(

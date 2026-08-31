@@ -85,6 +85,8 @@ def cluster_entry_points(neighbors, labels):
     for cluster_id, group in members.items():
         group = sorted(group)
         inside = set(group)
+        # Ties are common — every member of a ring reaches the same number — so
+        # `entry_point` is the first of the best, not necessarily a standout.
         best, reach = group[0], 0
         for node in group:
             hit = len(neighbors.get(node, set()) & inside)

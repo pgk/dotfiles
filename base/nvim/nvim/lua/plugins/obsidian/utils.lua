@@ -8,6 +8,37 @@ M.default_vault_path = vim.fn.expand("~/notes")
 -- M.vault_path is a computed property reading the active workspace's vault
 -- root (obsidian.nvim's Obsidian.dir), so :ObsidianWorkspace switches take
 -- effect without a restart.
+-- Note names, previews and paths come from note content, not from nvim itself.
+-- Escape rather than blank out control characters: a picker keyed on its own
+-- rendered rows needs distinct notes to render distinctly, and collapsing every
+-- control char to a space makes "a\tb" and "a b" collide, so selecting one row
+-- opens the other note. Lua's %c is ASCII-only, so the bidi and zero-width
+-- formatting characters -- which can reorder a row on screen and disguise which
+-- note it names -- are escaped explicitly.
+function M.sanitize(s)
+  s = tostring(s or "")
+  s = s:gsub("%c", function(c)
+    return string.format("<%02X>", c:byte())
+  end)
+  s = s:gsub("\226\128([\139-\143\168-\174])", function(b)
+    return string.format("<U+20%02X>", b:byte() - 0x80)
+  end)
+  return (s:gsub("\239\187\191", "<U+FEFF>"))
+end
+
+-- `vim.cmd("edit " .. fnameescape(path))` is not safe for a path that came from
+-- the filesystem: fnameescape does not escape a newline, and nvim_exec2 splits on
+-- it first, so anything after it runs as an Ex command. The structured form takes
+-- the path as an argument rather than as command text.
+function M.edit(path)
+  if type(path) ~= "string" or path == "" then
+    vim.notify("Could not resolve the selected note", vim.log.levels.WARN)
+    return
+  end
+  vim.cmd.edit({ args = { path } })
+end
+
+
 setmetatable(M, {
   __index = function(_, key)
     if key == "vault_path" then

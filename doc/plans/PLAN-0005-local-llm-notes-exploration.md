@@ -424,19 +424,28 @@ false positives.
 
 ## The structural finding that forced the fixture to grow
 
-**A hubless cluster does not exist below about six notes.** For Louvain to keep a
-group whole it must be dense enough that no bipartition improves modularity, and at
-small sizes that density forces some note to reach more than half the group. Searched
-and confirmed: zero qualifying cases in 4,000 random graphs at n=10–14, and zero among
-every circulant `C(n, steps)` for n=8..16. The first cases appear at n≈14, as a 6-note
-cluster with coverage 0.4.
+**A hubless *cluster* cannot be smaller than six notes.** For Louvain to keep a group
+whole it must be dense enough that no bipartition improves modularity, and below six
+that density forces some note to reach half the group. Exhaustive over every connected
+graph, the minimum achievable coverage is 1.0 at n≤3, 0.667 at n=4, exactly 0.5 at n=5
+and 0.4 at n=6 — so six is the first reportable size, and the n=5 case is spared only
+because the threshold test is `coverage >= min_coverage`. That `>=` is load-bearing;
+there is now a test pinning it.
+
+**A correction.** `bc6ce2d`'s commit message says a search over 4,000 random graphs
+found no counterexample "under fourteen nodes". That is wrong — it measured *whole
+vault* size, not cluster size, and hubless clusters occur there from about n=10 at
+roughly 1 in 3,000, which a 4,000-graph search misses three times in four. The
+commit's own test fixture, a 10-note `ring_beside_a_clique(6, 4)`, is a counterexample
+to its own message. Cluster size is the real bound; vault size is not bounded at all.
 
 Consequences, both worth keeping in mind:
 
 - The `hubless-*` ring grew from 4 notes to **8**. At 4 it scored 0.667 and could never
-  have been reported — the fixture was named for a case it did not exercise. A bare
-  ring of 8 splits into two arcs; it holds together only when embedded beside a denser
-  cluster, which `dev-vault` and the unit-test helper both now do deliberately.
+  have been reported — the fixture was named for a case it did not exercise. Six would
+  have sufficed; eight was kept for the three reasons in `dev-vault`'s CLAUDE.md
+  section. A *bare* ring of 8 splits into two arcs, so both `dev-vault` and the
+  unit-test helper embed it beside a denser cluster.
 - This is a *property of the tool*, not a limitation: small clusters genuinely do not
   need a map of content. But it means **the tool cannot be exercised on a toy graph**,
   and anyone shrinking the ring will silently disarm the fixture. `dev-vault`'s

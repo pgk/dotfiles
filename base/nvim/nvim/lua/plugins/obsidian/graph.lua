@@ -3,11 +3,13 @@ local utils = require("plugins.obsidian.utils")
 
 local M = {}
 
--- Note names and paths come from note content, not from nvim itself; strip
--- control chars so a crafted note can't split one entry into several picker rows
--- with mismatched path_by_line keys. Same reason as similar.lua.
-local function sanitize(s)
-  return (tostring(s or ""):gsub("%c", " "))
+local sanitize = utils.sanitize
+
+-- Every number below comes from notes-graph's own arithmetic, but vim.json.decode
+-- maps a JSON null to vim.NIL, which is truthy -- so `x or 0` would pass it
+-- straight into string.format and throw.
+local function num(v)
+  return type(v) == "number" and v or 0
 end
 
 local function run_notes_graph()
@@ -16,7 +18,7 @@ local function run_notes_graph()
     return nil
   end
 
-  local result = vim.system({ "notes-graph", utils.vault_path, "--json" }, { text = true }):wait()
+  local result = vim.system({ "notes-graph", utils.vault_path, "--json" }, { text = true }):wait(30000)
   local output = result.stdout or ""
   if result.stderr and result.stderr ~= "" then
     vim.notify("notes-graph: " .. sanitize(result.stderr), vim.log.levels.WARN)
@@ -38,15 +40,16 @@ local function describe(entry, vault)
   return string.format("[%s] %-30s (%d %s)  %s", status, sanitize(entry.name), entry.degree, plural, rel)
 end
 
--- A cluster row names the note that comes closest to being its entry point, since
--- that is what you would promote to a map of content -- or write next to.
+-- A cluster row names its best-connected member, since that is what you would
+-- promote to a map of content -- or write next to. In a ring every member ties,
+-- so treat it as a starting place rather than a recommendation.
 local function describe_cluster(entry)
   return string.format(
     "[NO HUB] %-30s (%d notes, best reaches %d of %d)  %s",
     sanitize(entry.name),
-    entry.size,
-    entry.reach,
-    entry.others,
+    num(entry.size),
+    num(entry.reach),
+    num(entry.others),
     sanitize(entry.rel)
   )
 end
@@ -60,12 +63,12 @@ local function header_for(shape)
   end
   return string.format(
     "%d notes, %d links, %d components, largest %d -- %d clusters, modularity %.3f",
-    shape.notes or 0,
-    shape.edges or 0,
-    shape.components or 0,
-    shape.largest_component or 0,
-    shape.clusters or 0,
-    shape.modularity or 0
+    num(shape.notes),
+    num(shape.edges),
+    num(shape.components),
+    num(shape.largest_component),
+    num(shape.clusters),
+    num(shape.modularity)
   )
 end
 
@@ -77,9 +80,10 @@ function M.check_health()
 
   local lines = {}
   local path_by_line = {}
-  -- Hubless clusters first: there are a handful of them at most, and hundreds of
-  -- sparse notes would otherwise bury them.
-  for _, entry in ipairs(result.hubless_clusters or {}) do
+  -- Hubless clusters first, largest first: the big ones are the actionable ones,
+  -- and hundreds of sparse notes would otherwise bury them.
+  local hubless = type(result.hubless_clusters) == "table" and result.hubless_clusters or {}
+  for _, entry in ipairs(hubless) do
     local line = describe_cluster(entry)
     table.insert(lines, line)
     path_by_line[line] = entry.entry_point
@@ -108,10 +112,7 @@ function M.check_health()
         if not selected or #selected == 0 then
           return
         end
-        local path = path_by_line[selected[1]]
-        if path then
-          vim.cmd("edit " .. vim.fn.fnameescape(path))
-        end
+        utils.edit(path_by_line[selected[1]])
       end,
     },
   })
