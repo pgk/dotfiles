@@ -358,10 +358,8 @@ not).
 
 ## Still open
 
-- **Tool #2 — cluster-level health in `notes-graph`.** Unstarted, and the reason the
-  shared module exists. Primary output was to be **clusters with no hub**. Everything it
-  needs is in place: `notes_cluster.shape()`, `components()`, `louvain()`, and a fixture
-  (`hubless-one`..`four`) built specifically for it.
+- ~~**Tool #2 — cluster-level health in `notes-graph`.**~~ **Built** (`bc6ce2d`), see
+  below.
 - **Whether bridge ranking actually helps**, which only real use can answer. The
   original question — do top hits read as connections worth making, or just shared
   vocabulary? — is now *answerable*, because every row states its cluster and the header
@@ -388,3 +386,74 @@ not).
     score `NaN`. Fix: reject non-finite values in `notes_embed_cache.normalize`.
 - `bin/mknote` still writes to `~/Sync/notes` while everything else uses `~/notes`.
   Flagged three times now, never resolved.
+
+---
+
+# Session 4 outcome (2026-09-01): tool #2 built
+
+`notes-graph` now reports **clusters with no hub** alongside its per-note health.
+Commit `bc6ce2d`. 258 tests across 7 suites.
+
+## The metric, and why it is coverage rather than degree dominance
+
+"Which clusters have no hub" needs a threshold, and the vault may never be measured
+to tune one. Two candidates were tested against planted fixtures:
+
+- **Degree dominance** — is the top note's degree an outlier against its cluster
+  peers? Scale-free, but it false-positives on a three-note triangle, so it needs a
+  *second* threshold (a minimum cluster size) to be usable.
+- **Coverage** — the share of a cluster's other notes reachable in one hop from its
+  best-connected member. **Chosen.** A map of content links to everything it indexes,
+  so it scores 1.0; and the measure is scale-sensitive, so no minimum-size threshold
+  has to be invented.
+
+Measured, planted-fixture behaviour:
+
+| shape | coverage |
+|---|---|
+| planted MOC, 10 / 20 / 40 notes | 1.0, 1.0, 1.0 |
+| hubless mesh, 20 notes | 0.6 – 0.75 |
+| hubless mesh, 40 notes | 0.43 – 0.57 |
+| hubless mesh, 60 notes | 0.25 – 0.4 |
+| any cluster of 2–4 notes | 0.67 – 1.0 |
+
+A MOC scores 1.0 at every size, so `--hub-reach 0.5` has a wide margin and small
+clusters can never be flagged. Note Louvain splits a large MOC cluster into the MOC
+plus satellite pairs — every resulting piece still scores 1.0, so this produces no
+false positives.
+
+## The structural finding that forced the fixture to grow
+
+**A hubless cluster does not exist below about six notes.** For Louvain to keep a
+group whole it must be dense enough that no bipartition improves modularity, and at
+small sizes that density forces some note to reach more than half the group. Searched
+and confirmed: zero qualifying cases in 4,000 random graphs at n=10–14, and zero among
+every circulant `C(n, steps)` for n=8..16. The first cases appear at n≈14, as a 6-note
+cluster with coverage 0.4.
+
+Consequences, both worth keeping in mind:
+
+- The `hubless-*` ring grew from 4 notes to **8**. At 4 it scored 0.667 and could never
+  have been reported — the fixture was named for a case it did not exercise. A bare
+  ring of 8 splits into two arcs; it holds together only when embedded beside a denser
+  cluster, which `dev-vault` and the unit-test helper both now do deliberately.
+- This is a *property of the tool*, not a limitation: small clusters genuinely do not
+  need a map of content. But it means **the tool cannot be exercised on a toy graph**,
+  and anyone shrinking the ring will silently disarm the fixture. `dev-vault`'s
+  CLAUDE.md section says so explicitly.
+
+## Also in this commit
+
+`graph.lua` gained the `sanitize()` its two siblings already had — a MEDIUM finding
+from the previous session's security review, brought into scope because this commit
+renders more note-derived text into that picker. `deadlinks.lua` still lacks it.
+
+## Still open
+
+- **Whether either tool actually helps**, which only real use answers. Both now state
+  the graph they ran on (components, clusters, modularity) so their output carries its
+  own caveat.
+- The `--exclude` finding from the previous review is unfixed and is the most
+  consequential one left: `--exclude journal` silently excludes nothing.
+- Embedding-model swap (`bge-m3`) still unscheduled, not closed.
+- `master` is now **8 commits ahead of `origin/master`**, unpushed.
