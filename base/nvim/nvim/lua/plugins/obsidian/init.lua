@@ -7,6 +7,7 @@
 --   commands.lua    - Random, insert link, rename commands
 --   graph.lua       - Orphan / sparsely-connected note detection
 --   deadlinks.lua   - Dead link detection with fuzzy match suggestions
+--   similar.lua     - Semantically similar but unlinked note detection
 
 local vault_path = require("plugins.obsidian.utils").default_vault_path
 
@@ -29,6 +30,7 @@ return {
     local format = require("plugins.obsidian.format")
     local graph = require("plugins.obsidian.graph")
     local deadlinks = require("plugins.obsidian.deadlinks")
+    local similar = require("plugins.obsidian.similar")
 
     -- Setup all modules
     panel.setup()
@@ -38,6 +40,7 @@ return {
     format.setup()
     graph.setup()
     deadlinks.setup()
+    similar.setup()
 
     -- Set up path settings and mappings for markdown
     vim.api.nvim_create_autocmd("FileType", {
@@ -85,6 +88,7 @@ return {
     vim.keymap.set("v", "<leader>oe", "<cmd>ObsidianExtract<cr>", { desc = "Obsidian extract to note" })
     vim.keymap.set("n", "<leader>og", "<cmd>ObsidianGraphHealth<cr>", { desc = "Obsidian orphan/sparse notes" })
     vim.keymap.set("n", "<leader>oD", "<cmd>ObsidianDeadLinks<cr>", { desc = "Obsidian dead links" })
+    vim.keymap.set("n", "<leader>oS", "<cmd>ObsidianSimilar<cr>", { desc = "Obsidian similar unlinked notes" })
   end,
   opts = {
     workspaces = {
