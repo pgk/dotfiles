@@ -368,7 +368,23 @@ not).
   states the graph the clustering ran on. It is not yet *answered*.
 - The embedding-model swap (`bge-m3`) remains unscheduled, not closed.
 - `master` is now **6 commits ahead of `origin/master`**, still unpushed.
-- `deadlinks.lua`'s unsanitized `rel` field is still unfixed — a known one-line change,
-  deferred again. `similar.lua` sanitizes; `deadlinks.lua` does not.
+- **Pre-existing findings raised by the review of this work, deliberately not fixed**
+  (all outside the scope of the clustering task; none introduced by it):
+  - `--exclude` matches only whole relative paths, case-sensitively. `--exclude
+    journal` or `--exclude Personal/*` silently excludes *nothing*, with no warning.
+    This is the one that matters: `--exclude` is the only mechanism keeping a subtree
+    out of `notes-similar`'s HTTP upload. Fixing it means deciding whether a bare
+    directory name should exclude its tree and whether matching should be
+    case-insensitive on APFS — a semantic choice, hence left to the user.
+  - `graph.lua` has no `sanitize()` at all, so a note filename containing a newline
+    splits one `:ObsidianGraphHealth` picker row in two and mismatches
+    `path_by_line`. Same class as the `deadlinks.lua` issue below; `similar.lua` has
+    the fix to copy.
+  - `deadlinks.lua`'s unsanitized `rel` field — a known one-line change, deferred for
+    the third time.
+  - `json.loads` accepts `NaN`/`Infinity`, and `normalize()` propagates them, so a
+    malfunctioning embedding server writes NaN vectors into
+    `~/.cache/notes-similar/` where they persist until `--rebuild` and make every
+    score `NaN`. Fix: reject non-finite values in `notes_embed_cache.normalize`.
 - `bin/mknote` still writes to `~/Sync/notes` while everything else uses `~/notes`.
   Flagged three times now, never resolved.
