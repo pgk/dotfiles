@@ -33,11 +33,34 @@ is a hard rule, not a judgment call.
 
 ## `dev-vault/`
 
-A small, permanent, synthetic notes fixture: six files covering the cases
-both `:ObsidianGraphHealth` and `:ObsidianDeadLinks` care about — a
-well-connected hub, sparse notes (1-2 links), an orphan (zero links), and a
-note with two dead links (one with a fuzzy-matchable typo, one with no
-match). None of its content is derived from or related to the user's real
-notes. Don't add a `README.md` or any other extra file inside `dev-vault/` —
-every `.md` file there is scanned by the graph/dead-link tools, so an
-unrelated file would skew their output.
+A small, permanent, synthetic notes fixture. None of its content is derived
+from or related to the user's real notes.
+
+Node-level cases, for `:ObsidianGraphHealth` and `:ObsidianDeadLinks`: a
+well-connected hub (`hub-note`), sparse notes with 1-2 links, an orphan with
+zero (`orphan-note`), and a note with two dead links — one fuzzy-matchable
+typo, one with no match (`broken-link-note`).
+
+Cluster-level cases, for the community detection in `notes_cluster.py`:
+
+- **Three link communities.** The original project/meeting cluster around
+  `hub-note`; a second, `cluster-b-*`, with its own hub; and `hubless-*`.
+- **A bridge.** `bridge-note` is the sole path between all three — an
+  articulation point, and the structural-hole case that cluster-crossing
+  ranking exists to find.
+- **A cluster with no hub.** `hubless-one`..`hubless-four` form a ring where
+  every note has roughly the same degree, so none reads as an entry point.
+- **A disconnected component.** `island-one`..`island-three` have no path to
+  the rest of the vault — a component, as opposed to the single-note orphan.
+
+Each cluster is given deliberately distinct vocabulary (planning, gardening,
+harbours, pottery) so `notes-similar` separates them too, not just the link
+graph.
+
+**Adding files.** More *synthetic notes* are fine and expected — the fixture
+grew for exactly this reason, and it will grow again. Don't add a `README.md`
+or any other non-note file: every `.md` file here is scanned by the tools, so
+one that isn't a note skews their output. When you add notes, keep the
+existing fixtures' degrees and dead links intact (adding an inbound link to
+`hub-note` is safe; adding one to a note documented as sparse is not) and
+update this section.
