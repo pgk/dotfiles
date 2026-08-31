@@ -57,6 +57,20 @@ class ResolveLinkTests(unittest.TestCase):
         self.assertIsNone(notes_common.resolve_link("ghost", index))
 
 
+class PrintableTests(unittest.TestCase):
+    def test_control_characters_become_spaces(self):
+        self.assertEqual(notes_common.printable("a\x1b[31mb\x07c"), "a [31mb c")
+
+    def test_ordinary_text_including_unicode_is_untouched(self):
+        self.assertEqual(notes_common.printable("Σημείωση — note"), "Σημείωση — note")
+
+    def test_newlines_and_tabs_are_flattened(self):
+        self.assertEqual(notes_common.printable("a\nb\tc"), "a b c")
+
+    def test_non_string_input_is_coerced(self):
+        self.assertEqual(notes_common.printable(OSError("boom")), "boom")
+
+
 class BuildNameIndexTests(unittest.TestCase):
     def test_duplicate_stem_keeps_first_and_warns(self):
         captured = io.StringIO()
@@ -64,6 +78,19 @@ class BuildNameIndexTests(unittest.TestCase):
             index = notes_common.build_name_index(["/vault/a/dup.md", "/vault/b/dup.md"])
         self.assertEqual(index["dup"], "/vault/a/dup.md")
         self.assertIn("duplicate note name 'dup'", captured.getvalue())
+
+
+class DuplicateWarningTests(unittest.TestCase):
+    def test_a_control_character_in_a_duplicate_name_cannot_drive_the_terminal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write_vault(tmp, {"dup\x1b[31mname.md": "a", "sub/dup\x1b[31mNAME.md": "b"})
+            paths = list(notes_common.iter_markdown_files(tmp, []))
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                notes_common.build_name_index(paths)
+        captured = stderr.getvalue()
+        self.assertIn("duplicate note name", captured)
+        self.assertNotIn("\x1b", captured)
 
 
 class IterMarkdownFilesTests(unittest.TestCase):

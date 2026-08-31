@@ -53,10 +53,6 @@ def build_report(dead_links_by_file, name_index):
     return report
 
 
-def _printable(text):
-    return "".join(ch if ch.isprintable() else " " for ch in text)
-
-
 def format_text(report, total, vault):
     if not report:
         return f"No dead links found among {total} notes in {vault}."
@@ -69,11 +65,11 @@ def format_text(report, total, vault):
     ]
     for entry in report:
         plural = "link" if len(entry["dead_links"]) == 1 else "links"
-        lines.append(f"{_printable(entry['name'])}  ({len(entry['dead_links'])} dead {plural})")
+        lines.append(f"{notes_common.printable(entry['name'])}  ({len(entry['dead_links'])} dead {plural})")
         for dl in entry["dead_links"]:
-            link = _printable(dl["link"])
+            link = notes_common.printable(dl["link"])
             if dl["candidates"]:
-                candidates = ", ".join(_printable(c) for c in dl["candidates"])
+                candidates = ", ".join(notes_common.printable(c) for c in dl["candidates"])
                 lines.append(f"  [[{link}]]  possible: {candidates}")
             else:
                 lines.append(f"  [[{link}]]  no matches")

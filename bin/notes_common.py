@@ -8,6 +8,11 @@ import sys
 WIKILINK_RE = re.compile(r"\[\[([^\]|]+)")
 
 
+def printable(text):
+    """Strip control characters from note- or server-derived text before it reaches a terminal."""
+    return "".join(ch if ch.isprintable() else " " for ch in str(text))
+
+
 def iter_markdown_files(vault, excludes):
     vault_real = os.path.realpath(vault)
     for root, dirs, files in os.walk(vault):
@@ -29,7 +34,10 @@ def build_name_index(files):
     for path in files:
         stem = os.path.splitext(os.path.basename(path))[0].lower()
         if stem in index:
-            print(f"warning: duplicate note name '{stem}', keeping {index[stem]}", file=sys.stderr)
+            print(
+                f"warning: duplicate note name '{printable(stem)}', keeping {printable(index[stem])}",
+                file=sys.stderr,
+            )
             continue
         index[stem] = path
     return index
