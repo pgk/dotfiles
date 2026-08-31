@@ -317,9 +317,8 @@ fi
 
 command -v docker-compose >/dev/null 2>&1 || {
   mkdir -p "$HOME/.local/bin"
-  echo 'docker compose $@' | tee -a "$HOME/.local.bin/docker-compose" &&
+  printf '#!/bin/sh\nexec docker compose "$@"\n' >"$HOME/.local/bin/docker-compose" &&
     chmod +x "$HOME/.local/bin/docker-compose"
-
 }
 
 command -v nvim >/dev/null 2>&1 && {
