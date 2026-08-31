@@ -135,5 +135,49 @@ class IterMarkdownFilesTests(unittest.TestCase):
             self.assertEqual([Path(p).parent.name for p in paths], ["a", "b"])
 
 
+class RequireVaultTests(unittest.TestCase):
+    """The guard that keeps every notes-* tool from inventing a ~/notes default."""
+
+    @contextlib.contextmanager
+    def env(self, value):
+        previous = os.environ.get("NOTES_VAULT")
+        if value is None:
+            os.environ.pop("NOTES_VAULT", None)
+        else:
+            os.environ["NOTES_VAULT"] = value
+        try:
+            yield
+        finally:
+            if previous is None:
+                os.environ.pop("NOTES_VAULT", None)
+            else:
+                os.environ["NOTES_VAULT"] = previous
+
+    def test_returns_an_explicit_path_unchanged(self):
+        with self.env(None):
+            self.assertEqual(notes_common.require_vault("/some/vault"), "/some/vault")
+
+    def test_explicit_path_wins_over_the_environment(self):
+        with self.env("/from/env"):
+            self.assertEqual(notes_common.require_vault("/explicit"), "/explicit")
+
+    def test_falls_back_to_notes_vault_env(self):
+        with self.env("/from/env"):
+            self.assertEqual(notes_common.require_vault(None), "/from/env")
+
+    def test_raises_when_nothing_names_a_vault(self):
+        with self.env(None):
+            with self.assertRaises(ValueError) as ctx:
+                notes_common.require_vault(None)
+        self.assertIn("VAULT path is required", str(ctx.exception))
+
+    def test_blank_argument_and_blank_env_do_not_count_as_a_vault(self):
+        # A quoted-but-empty shell variable is the shape of the accident this
+        # guard exists to stop; it must not read as "the user named a vault".
+        with self.env("   "):
+            with self.assertRaises(ValueError):
+                notes_common.require_vault("  ")
+
+
 if __name__ == "__main__":
     unittest.main()

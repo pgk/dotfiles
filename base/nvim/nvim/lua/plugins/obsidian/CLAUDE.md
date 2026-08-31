@@ -20,9 +20,10 @@ is a hard rule, not a judgment call.
 - Manual/interactive testing (e.g. checking a new `:Obsidian*` command in
   Neovim): temporarily point `Obsidian.dir` / the workspace path at
   `./dev-vault`, never at `~/notes`.
-- CLI smoke tests (`notes-graph`, `notes-deadlinks`): pass `./dev-vault` (or a
-  temp dir) as the vault argument explicitly — never rely on the `~/notes`
-  default.
+- CLI smoke tests (`notes-graph`, `notes-deadlinks`, `notes-similar`): pass
+  `./dev-vault` (or a temp dir) as the vault argument explicitly. None of the
+  three has a `~/notes` default any more — they refuse to run without a named
+  vault — but name it deliberately rather than leaning on that refusal.
 - Automated tests: build vaults with `tempfile.TemporaryDirectory()`, as the
   existing `*_test.py` files already do.
 - Delegated subagents don't inherit this file automatically — brief them

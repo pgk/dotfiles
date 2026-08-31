@@ -1,4 +1,4 @@
-"""Shared vault-walking, name-index, and link-parsing helpers for notes-graph and notes-deadlinks."""
+"""Shared vault-walking, name-index, and link-parsing helpers for the notes-* CLI tools."""
 
 import fnmatch
 import os
@@ -11,6 +11,22 @@ WIKILINK_RE = re.compile(r"\[\[([^\]|]+)")
 def printable(text):
     """Strip control characters from note- or server-derived text before it reaches a terminal."""
     return "".join(ch if ch.isprintable() else " " for ch in str(text))
+
+
+def require_vault(vault):
+    """Resolve the vault path, refusing to invent one.
+
+    None of the notes-* tools carry an implicit ~/notes default. A mistyped or
+    option-swallowed argument must never resolve to the user's real vault, so
+    the path has to be named — as an argument or via $NOTES_VAULT. Call this
+    before the vault is read, so a bad invocation costs nothing.
+    """
+    if vault and vault.strip():
+        return vault
+    from_env = os.environ.get("NOTES_VAULT", "").strip()
+    if from_env:
+        return from_env
+    raise ValueError("a VAULT path is required — pass it as an argument or set $NOTES_VAULT")
 
 
 def iter_markdown_files(vault, excludes):

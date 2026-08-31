@@ -96,7 +96,12 @@ def format_json(orphans, sparse, min_links, total, vault):
 
 def parse_args(argv):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("vault", nargs="?", default="~/notes", help="Path to the notes vault (default: ~/notes)")
+    parser.add_argument(
+        "vault",
+        nargs="?",
+        default=None,
+        help="Path to the notes vault; required, or set $NOTES_VAULT",
+    )
     parser.add_argument("-m", "--min-links", type=int, default=3, help="Notes below this connection count are 'sparse' (default: 3)")
     parser.add_argument("--json", action="store_true", help="Emit JSON instead of a text report")
     parser.add_argument(
@@ -111,7 +116,12 @@ def parse_args(argv):
 
 def main(argv=None):
     args = parse_args(argv)
-    vault = os.path.abspath(os.path.expanduser(args.vault))
+    try:
+        vault_spec = notes_common.require_vault(args.vault)
+    except ValueError as exc:
+        print(f"notes-graph: {exc}", file=sys.stderr)
+        return 1
+    vault = os.path.abspath(os.path.expanduser(vault_spec))
 
     if not os.path.isdir(vault):
         print(f"notes-graph: not a directory: {vault}", file=sys.stderr)

@@ -16,6 +16,7 @@ import notes_embed_client
 
 EmbedUnavailable = notes_embed_cache.EmbedUnavailable
 _printable = notes_common.printable
+require_vault = notes_common.require_vault
 
 MAX_CHARS = 8000
 PREVIEW_CHARS = 60
@@ -269,22 +270,6 @@ def run_query(args, vault, target_spec, notes, name_index, embedder):
     else:
         print(format_text(target, results, len(notes), args.all, vault))
     return 0
-
-
-def require_vault(vault):
-    """No implicit ~/notes anywhere.
-
-    This tool reads every note and sends text off-process, so a mistyped or
-    option-swallowed argument must never resolve to the real vault by default —
-    it has to be named, as an argument or via $NOTES_VAULT. Checked before the
-    vault is read, so a bad invocation costs nothing.
-    """
-    if vault and vault.strip():
-        return vault
-    from_env = os.environ.get("NOTES_VAULT", "").strip()
-    if from_env:
-        return from_env
-    raise ValueError("a VAULT path is required — pass it as an argument or set $NOTES_VAULT")
 
 
 def split_positional(args):

@@ -241,7 +241,7 @@ class CliSubprocessTests(unittest.TestCase):
 
     def test_cli_repeatable_exclude_leaves_vault_positional_intact(self):
         # Regression guard: --exclude must not be able to swallow the vault
-        # positional and silently fall back to the ~/notes default.
+        # positional, leaving the tool to run against some other vault.
         result = subprocess.run(
             [sys.executable, str(SCRIPT_PATH), "--exclude", "templates/*", "/no/such/vault", "--json"],
             capture_output=True,
@@ -251,31 +251,55 @@ class CliSubprocessTests(unittest.TestCase):
         self.assertIn("/no/such/vault", result.stderr)
         self.assertEqual(result.stdout, "")
 
-    def test_exclude_alone_falls_back_but_vault_field_reveals_it(self):
+    def test_exclude_alone_is_refused_rather_than_falling_back(self):
         # `--exclude PATH` with nothing else is genuinely ambiguous at the
-        # argparse layer (PATH could be the glob, with no vault given) and
-        # does fall back to the default vault. This cannot be fixed in
-        # argparse, so this test locks in its two safety nets instead:
-        # (1) $HOME is faked, so even a real fallback never touches the
-        #     user's actual ~/notes, and (2) the "vault" field in the JSON
-        #     output makes the fallback detectable rather than silent.
+        # argparse layer: PATH can be read as the glob, leaving no vault. That
+        # is unfixable in argparse, so the fix was to delete the ~/notes
+        # default instead — the ambiguity now costs an error message rather
+        # than a scan of the real vault. $HOME is faked as a second net: if
+        # this ever regresses, the canary is what gets read, not ~/notes.
         with tempfile.TemporaryDirectory() as fake_home:
             write_vault(fake_home, {"notes/canary.md": "canary"})
-            intended_vault = os.path.join(fake_home, "not-the-notes-dir")
-            os.makedirs(intended_vault)
             env = {**os.environ, "HOME": fake_home}
+            env.pop("NOTES_VAULT", None)
 
             result = subprocess.run(
-                [sys.executable, str(SCRIPT_PATH), "--exclude", intended_vault, "--json"],
+                [sys.executable, str(SCRIPT_PATH), "--exclude", os.path.join(fake_home, "notes"), "--json"],
                 capture_output=True,
                 text=True,
                 env=env,
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("VAULT path is required", result.stderr)
+        self.assertEqual(result.stdout, "")
+        self.assertNotIn("canary", result.stdout)
+
+    def test_bare_invocation_names_no_vault(self):
+        env = {**os.environ}
+        env.pop("NOTES_VAULT", None)
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT_PATH)],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("VAULT path is required", result.stderr)
+
+    def test_vault_can_come_from_notes_vault_env(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write_vault(tmp, {"a.md": "[[b]]", "b.md": "[[a]]"})
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT_PATH), "--json"],
+                capture_output=True,
+                text=True,
+                env={**os.environ, "NOTES_VAULT": tmp},
                 check=True,
             )
             payload = json.loads(result.stdout)
-
-        self.assertNotEqual(payload["vault"], os.path.abspath(intended_vault))
-        self.assertEqual(payload["vault"], os.path.join(fake_home, "notes"))
+            self.assertEqual(payload["vault"], tmp)
+            self.assertEqual(payload["total_notes"], 2)
 
 
 if __name__ == "__main__":
