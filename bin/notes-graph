@@ -3,56 +3,12 @@
 """Find orphan and sparsely-connected notes in a wikilink-based markdown vault."""
 
 import argparse
-import fnmatch
 import json
 import os
-import re
 import sys
 
-WIKILINK_RE = re.compile(r"\[\[([^\]|]+)")
-
-
-def iter_markdown_files(vault, excludes):
-    vault_real = os.path.realpath(vault)
-    for root, dirs, files in os.walk(vault):
-        dirs[:] = sorted(d for d in dirs if not d.startswith("."))
-        for name in sorted(files):
-            if not name.endswith(".md"):
-                continue
-            path = os.path.join(root, name)
-            if not os.path.realpath(path).startswith(vault_real + os.sep):
-                continue
-            rel = os.path.relpath(path, vault)
-            if any(fnmatch.fnmatch(rel, pattern) for pattern in excludes):
-                continue
-            yield path
-
-
-def build_name_index(files):
-    index = {}
-    for path in files:
-        stem = os.path.splitext(os.path.basename(path))[0].lower()
-        if stem in index:
-            print(f"warning: duplicate note name '{stem}', keeping {index[stem]}", file=sys.stderr)
-            continue
-        index[stem] = path
-    return index
-
-
-def extract_links(text):
-    links = []
-    for raw in WIKILINK_RE.findall(text):
-        target = raw.split("#", 1)[0].strip()
-        target = os.path.basename(target.replace("\\", "/"))
-        if target:
-            links.append(target)
-    return links
-
-
-def resolve_link(link_text, name_index):
-    if link_text.lower().endswith(".md"):
-        link_text = link_text[:-3]
-    return name_index.get(link_text.lower())
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import notes_common
 
 
 def build_graph(files, name_index):
@@ -64,8 +20,8 @@ def build_graph(files, name_index):
         except OSError as exc:
             print(f"warning: skipping unreadable note {path}: {exc}", file=sys.stderr)
             continue
-        for link_text in extract_links(text):
-            target = resolve_link(link_text, name_index)
+        for link_text in notes_common.extract_links(text):
+            target = notes_common.resolve_link(link_text, name_index)
             if target is None:
                 graph[path]["broken_links"].append(link_text)
             elif target != path:
@@ -161,8 +117,8 @@ def main(argv=None):
         print(f"notes-graph: not a directory: {vault}", file=sys.stderr)
         return 1
 
-    files = list(iter_markdown_files(vault, args.exclude or []))
-    name_index = build_name_index(files)
+    files = list(notes_common.iter_markdown_files(vault, args.exclude or []))
+    name_index = notes_common.build_name_index(files)
     graph = build_graph(files, name_index)
     orphans, sparse = classify(graph, args.min_links)
 

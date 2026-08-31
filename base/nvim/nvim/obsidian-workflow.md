@@ -23,6 +23,7 @@ This document describes the custom Obsidian integration for Neovim, built on top
 | `<leader>ot` | `:ObsidianTransclusionToggle` | Toggle transclusion rendering |
 | `<leader>oR` | `:ObsidianRename` | Rename note and update all links |
 | `<leader>og` | `:ObsidianGraphHealth` | Find orphan and sparsely-connected notes |
+| `<leader>oD` | `:ObsidianDeadLinks` | Find dead links and possible matches |
 
 ### In Markdown Files
 
@@ -57,6 +58,7 @@ This document describes the custom Obsidian integration for Neovim, built on top
 | `:ObsidianRename [name]` | Rename current note and update all links |
 | `:ObsidianDaily [offset]` | Open daily note with template (offset: -1 = yesterday) |
 | `:ObsidianGraphHealth` | Find orphan and sparsely-connected notes (picker) |
+| `:ObsidianDeadLinks` | Find dead links and possible matches (picker) |
 
 ## Links Panel
 
@@ -113,6 +115,17 @@ weakly connected from the rest of the vault:
 - Orphans have zero `[[links]]` in or out; sparse notes are below the connection
   threshold (default: 3, see `notes-graph --help`)
 - Results open in an fzf-lua picker; select one to jump to that note
+
+## Dead Links
+
+Use `<leader>oD` or `:ObsidianDeadLinks` to find `[[wikilinks]]` that don't resolve
+to any note:
+- Backed by the `notes-deadlinks` CLI tool (`bin/notes-deadlinks` in dotfiles)
+- Each dead link is shown with up to 3 fuzzy-matched candidate note names (or "no
+  matches"), for the typo/rename case
+- Results open in an fzf-lua picker, one row per `(note, dead link)` pair; select
+  one to jump to the **referring note** so you can fix the link — not to the
+  suggested match, since a wrong guess would silently take you to the wrong note
 
 ## Quick Capture Workflow
 

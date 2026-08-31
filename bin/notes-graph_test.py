@@ -2,10 +2,8 @@
 
 """Tests for bin/notes-graph, run against synthetic notes only (never ~/notes)."""
 
-import contextlib
 import importlib.machinery
 import importlib.util
-import io
 import json
 import os
 import subprocess
@@ -21,6 +19,9 @@ spec = importlib.util.spec_from_loader("notes_graph", loader)
 notes_graph = importlib.util.module_from_spec(spec)
 loader.exec_module(notes_graph)
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import notes_common
+
 
 def write_vault(root, files):
     for relpath, content in files.items():
@@ -33,8 +34,8 @@ class GraphBuildingTests(unittest.TestCase):
     def build(self, files, min_links=3, excludes=None):
         with tempfile.TemporaryDirectory() as tmp:
             write_vault(tmp, files)
-            paths = list(notes_graph.iter_markdown_files(tmp, excludes or []))
-            index = notes_graph.build_name_index(paths)
+            paths = list(notes_common.iter_markdown_files(tmp, excludes or []))
+            index = notes_common.build_name_index(paths)
             graph = notes_graph.build_graph(paths, index)
             orphans, sparse = notes_graph.classify(graph, min_links)
             return graph, orphans, sparse
@@ -82,50 +83,6 @@ class GraphBuildingTests(unittest.TestCase):
         self.assertEqual(sparse_names.get("b"), 1)
         self.assertEqual(sparse_names.get("c"), 1)
 
-    def test_alias_resolves_by_link_target_not_display_text(self):
-        graph, _, _ = self.build(
-            {
-                "hub.md": "content",
-                "a.md": "see [[hub|the hub note]]",
-            },
-            min_links=1,
-        )
-        hub_path = next(p for p in graph if p.endswith("hub.md"))
-        self.assertEqual(len(graph[hub_path]["neighbors"]), 1)
-
-    def test_case_insensitive_resolution(self):
-        graph, _, _ = self.build(
-            {
-                "hub.md": "content",
-                "a.md": "see [[HUB]]",
-            },
-            min_links=1,
-        )
-        hub_path = next(p for p in graph if p.endswith("hub.md"))
-        self.assertEqual(len(graph[hub_path]["neighbors"]), 1)
-
-    def test_transclusion_counts_as_connection(self):
-        graph, _, _ = self.build(
-            {
-                "hub.md": "content",
-                "embed.md": "![[hub]]",
-            },
-            min_links=1,
-        )
-        hub_path = next(p for p in graph if p.endswith("hub.md"))
-        self.assertEqual(len(graph[hub_path]["neighbors"]), 1)
-
-    def test_heading_fragment_is_stripped_before_resolving(self):
-        graph, _, _ = self.build(
-            {
-                "hub.md": "# Some Heading\ncontent",
-                "a.md": "see [[hub#Some Heading]]",
-            },
-            min_links=1,
-        )
-        hub_path = next(p for p in graph if p.endswith("hub.md"))
-        self.assertEqual(len(graph[hub_path]["neighbors"]), 1)
-
     def test_broken_link_reported_and_not_counted(self):
         _, orphans, _ = self.build(
             {
@@ -149,19 +106,6 @@ class GraphBuildingTests(unittest.TestCase):
         self.assertTrue(any(e["name"] == "a" for e in sparse_default))
         self.assertFalse(any(e["name"] == "a" for e in sparse_low))
 
-    def test_exclude_removes_matching_files(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write_vault(
-                tmp,
-                {
-                    "hub.md": "[[templates/skip-me]]",
-                    "templates/skip-me.md": "content",
-                },
-            )
-            paths = list(notes_graph.iter_markdown_files(tmp, ["templates/*"]))
-            names = {Path(p).name for p in paths}
-            self.assertEqual(names, {"hub.md"})
-
     def test_self_link_is_not_a_connection(self):
         graph, orphans, _ = self.build(
             {
@@ -173,75 +117,13 @@ class GraphBuildingTests(unittest.TestCase):
         self.assertEqual(len(graph[a_path]["neighbors"]), 0)
         self.assertEqual([e["name"] for e in orphans], ["a"])
 
-    def test_dotted_note_name_resolves(self):
-        graph, orphans, _ = self.build(
-            {
-                "node.js.md": "a note about node.js",
-                "a.md": "see [[node.js]]",
-            },
-            min_links=1,
-        )
-        target_path = next(p for p in graph if p.endswith("node.js.md"))
-        self.assertEqual(len(graph[target_path]["neighbors"]), 1)
-        self.assertEqual(orphans, [])
-
-    def test_folder_prefixed_link_resolves_by_basename(self):
-        graph, _, _ = self.build(
-            {
-                "sub/hub.md": "content",
-                "a.md": "see [[sub/hub]]",
-            },
-            min_links=1,
-        )
-        hub_path = next(p for p in graph if p.endswith("hub.md"))
-        self.assertEqual(len(graph[hub_path]["neighbors"]), 1)
-
-    def test_duplicate_stem_keeps_first_and_warns(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write_vault(
-                tmp,
-                {
-                    "a/dup.md": "first",
-                    "b/dup.md": "second",
-                },
-            )
-            # iter_markdown_files sorts its own traversal, so "a/dup.md" is
-            # deterministically first without the test re-sorting it.
-            paths = list(notes_graph.iter_markdown_files(tmp, []))
-            captured = io.StringIO()
-            with contextlib.redirect_stderr(captured):
-                index = notes_graph.build_name_index(paths)
-            self.assertEqual(index["dup"], paths[0])
-            self.assertIn("duplicate note name 'dup'", captured.getvalue())
-
-    def test_symlinked_file_outside_vault_is_skipped(self):
-        with tempfile.TemporaryDirectory() as outside, tempfile.TemporaryDirectory() as vault:
-            secret = Path(outside) / "secret.md"
-            secret.write_text("outside content")
-            (Path(vault) / "innocent.md").symlink_to(secret)
-            paths = list(notes_graph.iter_markdown_files(vault, []))
-            self.assertEqual(paths, [])
-
-    def test_dot_directories_are_skipped(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write_vault(
-                tmp,
-                {
-                    ".obsidian/config.md": "ignored",
-                    "note.md": "kept",
-                },
-            )
-            paths = list(notes_graph.iter_markdown_files(tmp, []))
-            names = {Path(p).name for p in paths}
-            self.assertEqual(names, {"note.md"})
-
 
 class FormatTextTests(unittest.TestCase):
     def test_report_includes_broken_links_and_relative_path(self):
         with tempfile.TemporaryDirectory() as tmp:
             write_vault(tmp, {"sub/a.md": "see [[ghost]]"})
-            paths = list(notes_graph.iter_markdown_files(tmp, []))
-            index = notes_graph.build_name_index(paths)
+            paths = list(notes_common.iter_markdown_files(tmp, []))
+            index = notes_common.build_name_index(paths)
             graph = notes_graph.build_graph(paths, index)
             orphans, sparse = notes_graph.classify(graph, 3)
             text = notes_graph.format_text(orphans, sparse, 3, len(paths), tmp)
@@ -254,8 +136,8 @@ class FormatTextTests(unittest.TestCase):
     def test_report_omits_empty_groups(self):
         with tempfile.TemporaryDirectory() as tmp:
             write_vault(tmp, {"a.md": "[[b]]", "b.md": "no links back"})
-            paths = list(notes_graph.iter_markdown_files(tmp, []))
-            index = notes_graph.build_name_index(paths)
+            paths = list(notes_common.iter_markdown_files(tmp, []))
+            index = notes_common.build_name_index(paths)
             graph = notes_graph.build_graph(paths, index)
             orphans, sparse = notes_graph.classify(graph, 2)
             text = notes_graph.format_text(orphans, sparse, 2, len(paths), tmp)
@@ -277,8 +159,8 @@ class JsonOutputTests(unittest.TestCase):
                     "lonely.md": "no links",
                 },
             )
-            paths = list(notes_graph.iter_markdown_files(tmp, []))
-            index = notes_graph.build_name_index(paths)
+            paths = list(notes_common.iter_markdown_files(tmp, []))
+            index = notes_common.build_name_index(paths)
             graph = notes_graph.build_graph(paths, index)
             orphans, sparse = notes_graph.classify(graph, 3)
             payload = json.loads(notes_graph.format_json(orphans, sparse, 3, len(paths), tmp))

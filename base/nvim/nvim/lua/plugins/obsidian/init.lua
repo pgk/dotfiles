@@ -6,6 +6,7 @@
 --   daily.lua       - Daily notes with template
 --   commands.lua    - Random, insert link, rename commands
 --   graph.lua       - Orphan / sparsely-connected note detection
+--   deadlinks.lua   - Dead link detection with fuzzy match suggestions
 
 local vault_path = require("plugins.obsidian.utils").default_vault_path
 
@@ -27,6 +28,7 @@ return {
     local commands = require("plugins.obsidian.commands")
     local format = require("plugins.obsidian.format")
     local graph = require("plugins.obsidian.graph")
+    local deadlinks = require("plugins.obsidian.deadlinks")
 
     -- Setup all modules
     panel.setup()
@@ -35,6 +37,7 @@ return {
     commands.setup()
     format.setup()
     graph.setup()
+    deadlinks.setup()
 
     -- Set up path settings and mappings for markdown
     vim.api.nvim_create_autocmd("FileType", {
@@ -81,6 +84,7 @@ return {
     vim.keymap.set("n", "<leader>oR", "<cmd>ObsidianRename<cr>", { desc = "Obsidian rename note" })
     vim.keymap.set("v", "<leader>oe", "<cmd>ObsidianExtract<cr>", { desc = "Obsidian extract to note" })
     vim.keymap.set("n", "<leader>og", "<cmd>ObsidianGraphHealth<cr>", { desc = "Obsidian orphan/sparse notes" })
+    vim.keymap.set("n", "<leader>oD", "<cmd>ObsidianDeadLinks<cr>", { desc = "Obsidian dead links" })
   end,
   opts = {
     workspaces = {
