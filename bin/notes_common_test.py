@@ -135,6 +135,73 @@ class IterMarkdownFilesTests(unittest.TestCase):
             self.assertEqual([Path(p).parent.name for p in paths], ["a", "b"])
 
 
+class ExcludeMatchingTests(unittest.TestCase):
+    """--exclude is the only thing keeping a subtree out of notes-similar's upload."""
+
+    def kept(self, patterns, files=None):
+        files = files or {
+            "top.md": "", "journal/a.md": "", "journal/deep/b.md": "",
+            "Personal/d.md": "", "templates/t.md": "",
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            write_vault(tmp, files)
+            with contextlib.redirect_stderr(io.StringIO()):
+                paths = list(notes_common.iter_markdown_files(tmp, patterns))
+            return sorted(str(Path(p).relative_to(tmp)) for p in paths)
+
+    def test_a_bare_directory_name_excludes_its_whole_tree(self):
+        self.assertEqual(self.kept(["journal"]), ["Personal/d.md", "templates/t.md", "top.md"])
+
+    def test_a_trailing_slash_is_accepted(self):
+        self.assertEqual(self.kept(["journal/"]), self.kept(["journal"]))
+
+    def test_the_existing_glob_form_still_works(self):
+        self.assertEqual(self.kept(["journal/*"]), self.kept(["journal"]))
+
+    def test_matching_is_case_insensitive(self):
+        # The vault normally lives on a case-insensitive filesystem, where
+        # `Journal` and `journal` name the same directory.
+        self.assertEqual(self.kept(["JOURNAL"]), self.kept(["journal"]))
+        self.assertNotIn("Personal/d.md", self.kept(["personal"]))
+
+    def test_nested_directories_below_an_excluded_one_go_too(self):
+        self.assertNotIn("journal/deep/b.md", self.kept(["journal"]))
+
+    def test_a_pattern_matching_nothing_warns_on_stderr(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write_vault(tmp, {"a.md": ""})
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                list(notes_common.iter_markdown_files(tmp, ["drafts", "a.md"]))
+        self.assertIn("--exclude drafts matched nothing", stderr.getvalue())
+        self.assertNotIn("a.md matched nothing", stderr.getvalue())
+
+    def test_the_warning_strips_control_characters(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write_vault(tmp, {"a.md": ""})
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                list(notes_common.iter_markdown_files(tmp, ["ev\x1b[31mil"]))
+        self.assertNotIn("\x1b", stderr.getvalue())
+
+    def test_an_excluded_directory_is_not_walked_at_all(self):
+        # Pruning, not filtering: the point of --exclude is that the subtree is
+        # never read, so an unreadable note inside it must not even be opened.
+        self.assertEqual(
+            self.kept(["skip"], {"keep.md": "", "skip/deep/x.md": ""}), ["keep.md"]
+        )
+
+    def test_a_file_pattern_still_matches_only_that_file(self):
+        self.assertEqual(
+            self.kept(["*/d.md"]),
+            ["journal/a.md", "journal/deep/b.md", "templates/t.md", "top.md"],
+        )
+
+    def test_matched_excludes_reports_which_pattern_hit(self):
+        self.assertEqual(notes_common.matched_excludes("journal/a.md", ["journal", "x"]), {"journal"})
+        self.assertEqual(notes_common.matched_excludes("top.md", ["journal"]), set())
+
+
 class RequireVaultTests(unittest.TestCase):
     """The guard that keeps every notes-* tool from inventing a ~/notes default."""
 

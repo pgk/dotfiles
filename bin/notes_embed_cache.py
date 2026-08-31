@@ -24,6 +24,11 @@ class EmbedUnavailable(Exception):
 
 def normalize(values):
     vec = array.array("f", values)
+    # A NaN survives normalisation -- sqrt(nan) is not 0, so the zero-norm guard
+    # below does not fire -- and would be written to the cache, where it poisons
+    # every later score until --rebuild. Refuse it at the door instead.
+    if not all(math.isfinite(v) for v in vec):
+        raise EmbedUnavailable("malformed embedding: contains NaN or infinity")
     norm = math.sqrt(math.sumprod(vec, vec))
     if norm == 0:
         return vec

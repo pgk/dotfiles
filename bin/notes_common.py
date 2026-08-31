@@ -29,20 +29,61 @@ def require_vault(vault):
     raise ValueError("a VAULT path is required — pass it as an argument or set $NOTES_VAULT")
 
 
+def matched_excludes(rel, patterns):
+    """Which patterns exclude this vault-relative path.
+
+    A pattern is tested against the path *and* every directory above it, so
+    `--exclude journal` excludes the whole subtree rather than nothing — matching
+    only whole relative paths meant a bare directory name silently excluded no
+    files at all. Matching is case-insensitive because the vault normally lives on
+    a case-insensitive filesystem, where `Journal` and `journal` are the same
+    directory and a capitalised pattern would otherwise miss it.
+
+    This is the only thing keeping a subtree out of notes-similar's upload, so it
+    fails loudly (see the warning in iter_markdown_files) rather than silently.
+    """
+    targets = [rel]
+    parent = os.path.dirname(rel)
+    while parent:
+        targets.append(parent)
+        parent = os.path.dirname(parent)
+    lowered = [t.lower() for t in targets]
+    return {
+        pattern
+        for pattern in patterns
+        if any(fnmatch.fnmatchcase(t, pattern.rstrip("/").lower()) for t in lowered)
+    }
+
+
 def iter_markdown_files(vault, excludes):
     vault_real = os.path.realpath(vault)
+    used = set()
     for root, dirs, files in os.walk(vault):
-        dirs[:] = sorted(d for d in dirs if not d.startswith("."))
+        keep = []
+        for name in sorted(dirs):
+            if name.startswith("."):
+                continue
+            hit = matched_excludes(os.path.relpath(os.path.join(root, name), vault), excludes)
+            if hit:
+                # Pruned, not just filtered: an excluded subtree is never walked.
+                used |= hit
+                continue
+            keep.append(name)
+        dirs[:] = keep
         for name in sorted(files):
             if not name.endswith(".md"):
                 continue
             path = os.path.join(root, name)
             if not os.path.realpath(path).startswith(vault_real + os.sep):
                 continue
-            rel = os.path.relpath(path, vault)
-            if any(fnmatch.fnmatch(rel, pattern) for pattern in excludes):
+            hit = matched_excludes(os.path.relpath(path, vault), excludes)
+            if hit:
+                used |= hit
                 continue
             yield path
+    for pattern in excludes:
+        if pattern not in used:
+            print(f"warning: --exclude {printable(pattern)} matched nothing", file=sys.stderr)
 
 
 def build_name_index(files):

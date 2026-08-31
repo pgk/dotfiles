@@ -239,5 +239,27 @@ class ErrorTextTests(unittest.TestCase):
         self.assertNotIn("hunter2", str(caught.exception))
 
 
+class JsonConstantTests(unittest.TestCase):
+    """Python's json accepts the non-standard NaN/Infinity literals by default."""
+
+    def test_nan_literal_is_refused(self):
+        with self.assertRaises(notes_embed_client.EmbedUnavailable):
+            json.loads('{"embedding": [NaN]}', parse_constant=notes_embed_client._reject_constant)
+
+    def test_infinity_literals_are_refused(self):
+        for literal in ("Infinity", "-Infinity"):
+            with self.assertRaises(notes_embed_client.EmbedUnavailable):
+                json.loads(
+                    '{"embedding": [%s]}' % literal,
+                    parse_constant=notes_embed_client._reject_constant,
+                )
+
+    def test_ordinary_json_still_parses(self):
+        parsed = json.loads(
+            '{"embedding": [1.0, -2.5]}', parse_constant=notes_embed_client._reject_constant
+        )
+        self.assertEqual(parsed["embedding"], [1.0, -2.5])
+
+
 if __name__ == "__main__":
     unittest.main()

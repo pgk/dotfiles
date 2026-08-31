@@ -200,6 +200,11 @@ similarity.
 
 ### Where your notes go
 
+To keep a subtree out of the index entirely, pass `--exclude` — `notes-similar
+--index --exclude journal ~/notes`. It matches directory names as well as globs, is
+case-insensitive, and warns if a pattern matched nothing, since a typo there would
+silently upload the notes you meant to hold back.
+
 `notes-similar` is the only tool in this workflow that sends note text off-process,
 so it is deliberately noisy and restrictive about it:
 

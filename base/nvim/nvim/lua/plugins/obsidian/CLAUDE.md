@@ -31,6 +31,22 @@ is a hard rule, not a judgment call.
 - If a real-vault run is ever genuinely necessary to verify something, ask
   the user first — don't assume it's fine.
 
+## Lua tests
+
+`utils_spec.lua` covers `utils.sanitize` and `utils.edit` — the two helpers standing
+between a hostile note filename and the editor, both of which were wrong until a
+review caught them. Run it with `:PlenaryBustedFile %`, or headless:
+
+```sh
+nvim --headless \
+  -c "set rtp+=$HOME/.local/share/nvim/lazy/plenary.nvim" \
+  -c "set rtp+=$PWD/base/nvim/nvim" \
+  -c "PlenaryBustedFile base/nvim/nvim/lua/plugins/obsidian/utils_spec.lua"
+```
+
+The picker row builders (`describe`, `describe_cluster`, `header_for`) are still
+module-local and untested; export them if you need to pin their behaviour.
+
 ## `dev-vault/`
 
 A small, permanent, synthetic notes fixture. None of its content is derived

@@ -3,6 +3,7 @@
 """Tests for bin/notes_embed_cache, run against synthetic data only (never ~/notes)."""
 
 import json
+import math
 import os
 import stat
 import sys
@@ -241,6 +242,31 @@ class RefreshTests(unittest.TestCase):
         with self.assertRaises(notes_embed_cache.EmbedUnavailable):
             notes_embed_cache.refresh(notes, cached, 0, counting_embedder(fail_after=6), batch_size=3)
         self.assertEqual(len(cached), 6)
+
+
+class NonFiniteEmbeddingTests(unittest.TestCase):
+    """A NaN vector would be cached and poison every later score until --rebuild."""
+
+    def test_nan_is_refused(self):
+        with self.assertRaises(notes_embed_cache.EmbedUnavailable) as ctx:
+            notes_embed_cache.normalize([float("nan"), 1.0])
+        self.assertIn("NaN", str(ctx.exception))
+
+    def test_infinity_is_refused(self):
+        for bad in (float("inf"), float("-inf")):
+            with self.assertRaises(notes_embed_cache.EmbedUnavailable):
+                notes_embed_cache.normalize([bad, 1.0])
+
+    def test_a_nan_does_not_trip_the_zero_norm_guard(self):
+        # sqrt(nan) is not 0, so without the explicit check the NaN would sail
+        # past `if norm == 0` and be normalised into every component.
+        self.assertNotEqual(math.sqrt(float("nan")), 0)
+
+    def test_an_all_zero_vector_is_still_allowed(self):
+        self.assertEqual(list(notes_embed_cache.normalize([0.0, 0.0])), [0.0, 0.0])
+
+    def test_ordinary_vectors_are_unaffected(self):
+        self.assertEqual([round(v, 4) for v in notes_embed_cache.normalize([3.0, 4.0])], [0.6, 0.8])
 
 
 if __name__ == "__main__":

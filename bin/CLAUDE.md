@@ -25,3 +25,17 @@ were read. `notes-similar` lost its default then; `notes-graph` and
 hazard was noticed still sitting in both. See
 `../base/nvim/nvim/lua/plugins/obsidian/CLAUDE.md` for the full rule and why
 it exists.
+
+## `--exclude`
+
+`notes_common.matched_excludes()` tests a pattern against a note's relative path
+**and every directory above it**, case-insensitively. `--exclude journal` therefore
+excludes the whole subtree, and `Journal` matches it too — the vault normally sits on
+a case-insensitive filesystem, where those name the same directory. Excluded
+directories are pruned from the walk, not filtered afterwards, so their contents are
+never read. A pattern matching nothing warns on stderr.
+
+Both properties matter beyond ergonomics: `--exclude` is the only mechanism keeping a
+subtree out of `notes-similar`'s HTTP upload, and it previously matched only whole
+relative paths, case-sensitively — so `--exclude journal` and `--exclude Journal/*`
+each silently excluded nothing.

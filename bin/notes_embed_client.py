@@ -87,6 +87,10 @@ def _ordered(data, count, where):
     return data
 
 
+def _reject_constant(name):
+    raise EmbedUnavailable(f"embedding server returned a non-numeric value: {name}")
+
+
 def _fetch(url, where, payload, timeout):
     request = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
     try:
@@ -94,7 +98,8 @@ def _fetch(url, where, payload, timeout):
             raw = response.read(MAX_RESPONSE_BYTES + 1)
         if len(raw) > MAX_RESPONSE_BYTES:
             raise EmbedUnavailable(f"{where}: response larger than {MAX_RESPONSE_BYTES} bytes")
-        return json.loads(raw.decode("utf-8"))
+        # Python's json accepts the non-standard NaN/Infinity literals by default.
+        return json.loads(raw.decode("utf-8"), parse_constant=_reject_constant)
     except urllib.error.HTTPError as exc:
         detail = notes_common.printable(exc.read(MAX_ERROR_BYTES).decode("utf-8", "replace"))[:200].strip()
         raise EmbedUnavailable(f"{where}: HTTP {exc.code} {detail}") from exc
