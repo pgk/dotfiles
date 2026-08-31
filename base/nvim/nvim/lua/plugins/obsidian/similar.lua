@@ -14,8 +14,28 @@ end
 
 local function describe(entry, vault)
   local rel = sanitize(entry.path:gsub("^" .. vim.pesc(vault) .. "/", ""))
-  local label = sanitize(entry.name) .. (entry.linked and " [linked]" or "")
-  return string.format("%.4f  %-32s %-42s %s", entry.score, label, sanitize(entry.preview), rel)
+  local label = sanitize(entry.name)
+    .. (entry.linked and " [linked]" or "")
+    .. (entry.crosses and " [bridge]" or "")
+  return string.format("%.4f  %-38s %-40s %s", entry.score, label, sanitize(entry.preview), rel)
+end
+
+-- The clustering is never tuned against the real vault, so the picker shows the
+-- graph it ran on: many tiny components, or a modularity near zero, means the
+-- [bridge] marks are noise.
+local function header_for(shape)
+  if type(shape) ~= "table" then
+    return nil
+  end
+  return string.format(
+    "%d notes, %d links, %d components (largest %d) | %d clusters, modularity %.3f",
+    shape.notes or 0,
+    shape.edges or 0,
+    shape.components or 0,
+    shape.largest_component or 0,
+    shape.clusters or 0,
+    shape.modularity or 0
+  )
 end
 
 local function open_picker(result, vault, origin)
@@ -29,8 +49,10 @@ local function open_picker(result, vault, origin)
     name_by_line[line] = sanitize(entry.name)
   end
 
+  local header = header_for(result.shape)
   require("fzf-lua").fzf_exec(lines, {
     prompt = "Similar> ",
+    fzf_opts = header and { ["--header"] = header } or nil,
     actions = {
       ["default"] = function(selected)
         if not selected or #selected == 0 then

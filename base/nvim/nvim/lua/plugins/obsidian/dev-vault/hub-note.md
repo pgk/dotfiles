@@ -1,6 +1,7 @@
 # Hub Note
 
-Synthetic fixture note for testing the Obsidian nvim plugin's graph-health and
-dead-link commands. Content is placeholder text, not a real note.
+Map of content for the planning cluster: scope, milestones, who is reading
+what. Synthetic fixture -- the well-connected hub case for
+:ObsidianGraphHealth.
 
 Related: [[project-plan]], [[meeting-notes]], [[reading-list]].

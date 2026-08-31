@@ -10,6 +10,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import notes_cluster
 import notes_common
 import notes_embed_cache
 import notes_embed_client
@@ -97,13 +98,17 @@ def linked_paths(target, notes, name_index):
     return linked
 
 
-def find_similar(target, notes, cached, name_index, limit, include_linked):
+def find_similar(target, notes, cached, name_index, limit, include_linked, clusters=None, bridge_first=True):
     target_vec = cached.get((target["path"], target["hash"]))
     if target_vec is None:
         raise EmbedUnavailable(f"no embedding for target note: {_printable(target['name'])}")
 
     # Always computed: under --all it still labels each row, it just stops filtering.
     linked = linked_paths(target, notes, name_index)
+    # No cluster data means no bridging signal, so every pair scores alike and
+    # ranking falls back to similarity alone.
+    clusters = clusters or {}
+    target_cluster = clusters.get(target["path"])
     results = []
     for note in notes:
         if note["path"] == target["path"]:
@@ -113,17 +118,36 @@ def find_similar(target, notes, cached, name_index, limit, include_linked):
         vec = cached.get((note["path"], note["hash"]))
         if vec is None:
             continue
+        cluster = clusters.get(note["path"])
         results.append(
             {
                 "name": note["name"],
                 "path": note["path"],
                 "score": round(math.sumprod(target_vec, vec), 4),
                 "linked": note["path"] in linked,
+                "crosses": cluster != target_cluster,
+                "cluster": cluster,
                 "preview": preview_of(note["text"]),
             }
         )
-    results.sort(key=lambda r: (-r["score"], r["name"].lower()))
+    # Cross-cluster pairs first: a link into a neighbourhood the target is already
+    # part of adds little, while one that bridges clusters is structurally novel.
+    # Deliberately a hard partition rather than a weighted blend — a weight would
+    # be a number tuned against a vault that is never measured. It also degrades
+    # gracefully: if every pair crosses (a fragmented vault) or none does (one
+    # giant cluster), the partition is empty and this is pure similarity order.
+    def rank(r):
+        return (not (bridge_first and r["crosses"]), -r["score"], r["name"].lower())
+
+    results.sort(key=rank)
     return results[:limit]
+
+
+def cluster_notes(notes, name_index):
+    """Wikilink communities over the notes already scanned, plus the graph they came from."""
+    neighbors = notes_cluster.adjacency_from_links(notes, name_index)
+    labels = notes_cluster.louvain(neighbors)
+    return labels, notes_cluster.shape(neighbors, labels)
 
 
 def resolve_target(spec, notes, name_index):
@@ -136,16 +160,21 @@ def resolve_target(spec, notes, name_index):
     return by_path.get(path) if path else None
 
 
-def format_text(target, results, total, include_linked, vault):
+def format_text(target, results, total, include_linked, vault, shape=None):
     name = _printable(target["name"])
     if not results:
         scope = "similar" if include_linked else "unlinked similar"
         return f"No {scope} notes found for '{name}' among {total} notes in {vault}."
     scope = "Similar" if include_linked else "Unlinked similar"
-    lines = [f"{scope} to '{name}' ({len(results)} of {total} notes in {vault})", ""]
+    lines = [f"{scope} to '{name}' ({len(results)} of {total} notes in {vault})"]
+    if shape:
+        lines.append(notes_cluster.describe_shape(shape))
+    lines.append("")
     for r in results:
         rel = _printable(os.path.relpath(r["path"], vault))
         mark = " [linked]" if r["linked"] else ""
+        if r["crosses"]:
+            mark += f" [bridges cluster {r['cluster']}]"
         lines.append(f"  {r['score']:.4f}  {_printable(r['name'])}{mark}")
         if r["preview"]:
             lines.append(f"          {_printable(r['preview'])}")
@@ -153,7 +182,7 @@ def format_text(target, results, total, include_linked, vault):
     return "\n".join(lines)
 
 
-def format_json(target, results, include_linked, vault, model, error=None):
+def format_json(target, results, include_linked, vault, model, error=None, shape=None):
     return json.dumps(
         {
             "vault": vault,
@@ -161,6 +190,7 @@ def format_json(target, results, include_linked, vault, model, error=None):
             "available": error is None,
             "error": error,
             "unlinked_only": not include_linked,
+            "shape": shape,
             "target": {"name": _printable(target["name"]), "path": target["path"]} if target else None,
             "similar": [dict(r, name=_printable(r["name"]), preview=_printable(r["preview"])) for r in results],
         },
@@ -181,6 +211,11 @@ def parse_args(argv):
     parser.add_argument("--rebuild", action="store_true", help="With --index, discard the cache and re-embed everything")
     parser.add_argument("-n", "--limit", type=int, default=10, help="Maximum results to return (default: 10)")
     parser.add_argument("--all", action="store_true", help="Include notes already linked to the target")
+    parser.add_argument(
+        "--no-bridge",
+        action="store_true",
+        help="Rank purely by similarity, without floating cluster-crossing pairs above the rest",
+    )
     parser.add_argument("--json", action="store_true", help="Emit JSON instead of a text report")
     parser.add_argument(
         "--max-refresh",
@@ -263,12 +298,15 @@ def run_query(args, vault, target_spec, notes, name_index, embedder):
     dims, embedded = notes_embed_cache.refresh(notes, cached, dims, embedder)
     if embedded:
         notes_embed_cache.save_cache(cdir, args.model, dims, notes, cached)
-    results = find_similar(target, notes, cached, name_index, args.limit, args.all)
+    clusters, shape = cluster_notes(notes, name_index)
+    results = find_similar(
+        target, notes, cached, name_index, args.limit, args.all, clusters, not args.no_bridge
+    )
 
     if args.json:
-        print(format_json(target, results, args.all, vault, args.model))
+        print(format_json(target, results, args.all, vault, args.model, shape=shape))
     else:
-        print(format_text(target, results, len(notes), args.all, vault))
+        print(format_text(target, results, len(notes), args.all, vault, shape))
     return 0
 
 

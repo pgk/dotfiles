@@ -1,6 +1,6 @@
 # Cluster B One
 
-Synthetic fixture note. Placeholder text only.
+Compost heaps, soil temperature and when the heap is hot enough to turn.
+Synthetic fixture, gardening cluster.
 
-Compost and soil temperature. Sits inside the second community, linking to its
-hub and to a sibling: [[cluster-b-hub]], [[cluster-b-two]].
+Linked to its hub and a sibling: [[cluster-b-hub]], [[cluster-b-two]].

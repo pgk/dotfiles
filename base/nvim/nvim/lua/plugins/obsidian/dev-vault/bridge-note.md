@@ -1,9 +1,7 @@
 # Bridge Note
 
-Synthetic fixture note. Placeholder text only.
-
-Deliberately the only path between the three link communities -- an
-articulation point, and the structural-hole fixture case. Cutting it splits
-the graph into three components.
+Synthetic fixture -- the structural-hole case, and deliberately the only path
+between the three link communities. Cutting it splits the graph into three
+components, which is what makes it an articulation point.
 
 Joins [[hub-note]], [[cluster-b-hub]] and [[hubless-one]].

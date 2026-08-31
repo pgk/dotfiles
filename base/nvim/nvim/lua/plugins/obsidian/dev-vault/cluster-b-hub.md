@@ -1,9 +1,7 @@
 # Cluster B Hub
 
-Synthetic fixture note. Placeholder text only.
-
-Entry point for the second link community, kept topically distinct from the
-project/meeting cluster so embeddings separate them too: seed trays, compost
-turning, rainfall, pruning schedules.
+Seed trays, compost turning, rainfall totals and the pruning calendar.
+Synthetic fixture -- entry point for the gardening cluster, kept topically
+distinct from the planning cluster so notes-similar separates them too.
 
 Gathers [[cluster-b-one]], [[cluster-b-two]], [[cluster-b-three]].

@@ -1,6 +1,5 @@
 # Cluster B Three
 
-Synthetic fixture note. Placeholder text only.
-
-Pruning schedule and rainfall. Attached to the community by its hub alone:
+Pruning schedule, rainfall and which beds flood first. Synthetic fixture,
+gardening cluster -- attached to the community by its hub alone:
 [[cluster-b-hub]].

@@ -1,6 +1,7 @@
 # Broken Link Note
 
-Synthetic fixture note. Placeholder text only.
+Estimates, risk registers and the reporting cadence. Synthetic fixture,
+planning cluster.
 
 Connects to [[hub-note]]. Also references a mistyped [[projct-plan]] (typo
 fixture for :ObsidianDeadLinks fuzzy matching) and a made-up

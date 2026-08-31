@@ -1,6 +1,5 @@
 # Reading List
 
-Synthetic fixture note. Placeholder text only.
-
-Curated from [[hub-note]]. Deliberately has no other connections -- this is
-the sparse, exactly-one-link fixture case.
+Books and papers queued for the planning work, half of them unread.
+Synthetic fixture -- the sparse, exactly-one-link case: deliberately has no
+connections beyond [[hub-note]].

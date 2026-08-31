@@ -81,6 +81,36 @@ class BuildGraphTests(unittest.TestCase):
         self.assertTrue(all(isinstance(v, set) for v in neighbors.values()))
 
 
+class AdjacencyFromLinksTests(unittest.TestCase):
+    """The in-memory path, for callers like notes-similar that already read the notes."""
+
+    def test_agrees_with_build_graph(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write_vault(tmp, {"a.md": "[[b]] [[ghost]]", "b.md": "[[c]]", "c.md": "", "d.md": ""})
+            paths = list(notes_common.iter_markdown_files(tmp, []))
+            index = notes_common.build_name_index(paths)
+            from_files = notes_cluster.adjacency(notes_cluster.build_graph(paths, index))
+            entries = [
+                {"path": p, "links": notes_common.extract_links(Path(p).read_text())}
+                for p in paths
+            ]
+            self.assertEqual(notes_cluster.adjacency_from_links(entries, index), from_files)
+
+    def test_links_outside_the_scanned_set_are_not_edges(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write_vault(tmp, {"a.md": "", "b.md": ""})
+            paths = list(notes_common.iter_markdown_files(tmp, []))
+            index = notes_common.build_name_index(paths)
+        # `index` still resolves both notes, but only one is handed over as an entry.
+        entries = [{"path": paths[0], "links": ["b"]}]
+        self.assertEqual(notes_cluster.adjacency_from_links(entries, index), {paths[0]: set()})
+
+    def test_self_links_are_not_edges(self):
+        entries = [{"path": "/v/a.md", "links": ["a"]}]
+        index = {"a": "/v/a.md"}
+        self.assertEqual(notes_cluster.adjacency_from_links(entries, index), {"/v/a.md": set()})
+
+
 class ComponentsTests(unittest.TestCase):
     def test_splits_disconnected_groups(self):
         graph = undirected([("a", "b"), ("c", "d"), ("d", "e")])

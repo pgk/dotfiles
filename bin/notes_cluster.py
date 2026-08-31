@@ -17,8 +17,27 @@ import sys
 import notes_common
 
 
+def adjacency_from_links(entries, name_index):
+    """Adjacency for callers that already read the notes.
+
+    Each entry needs a "path" and its raw "links". Links to notes outside the
+    scanned set, and a note's links to itself, are not edges.
+    """
+    neighbors = {entry["path"]: set() for entry in entries}
+    for entry in entries:
+        path = entry["path"]
+        for link_text in entry["links"]:
+            target = notes_common.resolve_link(link_text, name_index)
+            if target is not None and target != path and target in neighbors:
+                neighbors[path].add(target)
+                neighbors[target].add(path)
+    return neighbors
+
+
 def build_graph(files, name_index):
-    graph = {path: {"neighbors": set(), "broken_links": []} for path in files}
+    """Read every note, then resolve its links: {path: {neighbors, broken_links}}."""
+    entries = []
+    broken = {path: [] for path in files}
     for path in files:
         try:
             with open(path, "r", encoding="utf-8", errors="replace") as f:
@@ -29,15 +48,15 @@ def build_graph(files, name_index):
                 f"{notes_common.printable(exc)}",
                 file=sys.stderr,
             )
+            entries.append({"path": path, "links": []})
             continue
-        for link_text in notes_common.extract_links(text):
-            target = notes_common.resolve_link(link_text, name_index)
-            if target is None:
-                graph[path]["broken_links"].append(link_text)
-            elif target != path:
-                graph[path]["neighbors"].add(target)
-                graph[target]["neighbors"].add(path)
-    return graph
+        links = notes_common.extract_links(text)
+        entries.append({"path": path, "links": links})
+        broken[path] = [
+            link for link in links if notes_common.resolve_link(link, name_index) is None
+        ]
+    neighbors = adjacency_from_links(entries, name_index)
+    return {path: {"neighbors": neighbors[path], "broken_links": broken[path]} for path in files}
 
 
 def adjacency(graph):
