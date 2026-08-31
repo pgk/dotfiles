@@ -1,0 +1,216 @@
+"""Wikilink graph construction and deterministic community detection.
+
+Shared by notes-graph and notes-similar, which both need the same undirected
+adjacency map.
+
+Louvain rather than label propagation because it yields a modularity score: the
+real vault is deliberately never measured during development, so the tools
+cannot be tuned against known numbers and must instead report the shape they
+found for the reader to judge.
+
+Every node ordering in here is sorted, so the same vault always produces the
+same clusters with the same ids across runs.
+"""
+
+import sys
+
+import notes_common
+
+
+def build_graph(files, name_index):
+    graph = {path: {"neighbors": set(), "broken_links": []} for path in files}
+    for path in files:
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                text = f.read()
+        except OSError as exc:
+            print(
+                f"warning: skipping unreadable note {notes_common.printable(path)}: "
+                f"{notes_common.printable(exc)}",
+                file=sys.stderr,
+            )
+            continue
+        for link_text in notes_common.extract_links(text):
+            target = notes_common.resolve_link(link_text, name_index)
+            if target is None:
+                graph[path]["broken_links"].append(link_text)
+            elif target != path:
+                graph[path]["neighbors"].add(target)
+                graph[target]["neighbors"].add(path)
+    return graph
+
+
+def adjacency(graph):
+    """The plain {path: set(path)} map community detection consumes."""
+    return {path: set(entry["neighbors"]) for path, entry in graph.items()}
+
+
+def components(neighbors):
+    """Connected components, each a sorted node list. Largest first, then alphabetical."""
+    seen = set()
+    found = []
+    for node in sorted(neighbors):
+        if node in seen:
+            continue
+        seen.add(node)
+        stack = [node]
+        group = []
+        while stack:
+            current = stack.pop()
+            group.append(current)
+            for other in sorted(neighbors.get(current, ())):
+                if other in neighbors and other not in seen:
+                    seen.add(other)
+                    stack.append(other)
+        found.append(sorted(group))
+    found.sort(key=lambda group: (-len(group), group[0]))
+    return found
+
+
+def _index_graph(neighbors):
+    """Relabel nodes to 0..n-1 in sorted order, so later levels can compare ids."""
+    nodes = sorted(neighbors)
+    index = {node: i for i, node in enumerate(nodes)}
+    adj = {i: {} for i in range(len(nodes))}
+    for node in nodes:
+        u = index[node]
+        for other in neighbors[node]:
+            v = index.get(other)
+            if v is not None and v != u:
+                adj[u][v] = 1.0
+    return nodes, index, adj, {u: 0.0 for u in adj}
+
+
+def _degrees(adj, loops):
+    """Weighted degree, counting a self-loop at both of its ends."""
+    return {u: sum(adj[u].values()) + 2 * loops[u] for u in adj}
+
+
+def _modularity(adj, loops, community):
+    degrees = _degrees(adj, loops)
+    total = sum(degrees.values())  # 2m
+    if total == 0:
+        return 0.0
+    inner = {}
+    tot = {}
+    for u in adj:
+        c = community[u]
+        tot[c] = tot.get(c, 0.0) + degrees[u]
+        inner[c] = inner.get(c, 0.0) + 2 * loops[u]
+        for v, weight in adj[u].items():
+            if community[v] == c:
+                inner[c] += weight
+    return sum(inner[c] / total - (tot[c] / total) ** 2 for c in tot)
+
+
+def _local_moving(adj, loops):
+    """One Louvain level: move each node to the neighbouring community it most improves."""
+    degrees = _degrees(adj, loops)
+    total = sum(degrees.values())
+    community = {u: u for u in adj}
+    if total == 0:
+        return community
+    tot = dict(degrees)
+    improved = True
+    while improved:
+        improved = False
+        for u in sorted(adj):
+            own = community[u]
+            weights = {}
+            for v, weight in adj[u].items():
+                weights[community[v]] = weights.get(community[v], 0.0) + weight
+            # Remove u from its community before scoring, so staying put competes
+            # on the same footing and scores exactly 0 when u is already alone.
+            tot[own] -= degrees[u]
+            candidates = [(weights.get(own, 0.0) - tot[own] * degrees[u] / total, -own)]
+            for c in sorted(weights):
+                if c != own:
+                    candidates.append((weights[c] - tot[c] * degrees[u] / total, -c))
+            _, negated = max(candidates)
+            best = -negated
+            tot[best] += degrees[u]
+            if best != own:
+                community[u] = best
+                improved = True
+    return community
+
+
+def _aggregate(adj, loops, community):
+    """Collapse each community into one node, preserving total edge weight."""
+    labels = {c: i for i, c in enumerate(sorted(set(community.values())))}
+    new_adj = {i: {} for i in labels.values()}
+    new_loops = {i: 0.0 for i in labels.values()}
+    for u in sorted(adj):
+        cu = labels[community[u]]
+        new_loops[cu] += loops[u]
+        for v, weight in adj[u].items():
+            if v <= u:  # each undirected edge once
+                continue
+            cv = labels[community[v]]
+            if cu == cv:
+                new_loops[cu] += weight
+            else:
+                new_adj[cu][cv] = new_adj[cu].get(cv, 0.0) + weight
+                new_adj[cv][cu] = new_adj[cv].get(cu, 0.0) + weight
+    return new_adj, new_loops
+
+
+def louvain(neighbors):
+    """Community id per node. Isolated notes each get their own cluster."""
+    nodes, _, adj, loops = _index_graph(neighbors)
+    if not nodes:
+        return {}
+    assignment = {u: u for u in adj}
+    while True:
+        community = _local_moving(adj, loops)
+        if len(set(community.values())) == len(adj):
+            break  # nothing merged, so no further level can help
+        labels = {c: i for i, c in enumerate(sorted(set(community.values())))}
+        assignment = {u: labels[community[assignment[u]]] for u in assignment}
+        adj, loops = _aggregate(adj, loops, community)
+
+    # Renumber by first member, so ids don't depend on how many levels ran.
+    order = {}
+    for u in sorted(assignment):
+        order.setdefault(assignment[u], len(order))
+    return {nodes[u]: order[assignment[u]] for u in assignment}
+
+
+def modularity(neighbors, labels):
+    """How much better the partition is than chance: ~0 is no structure, 0.3+ is real."""
+    _, index, adj, loops = _index_graph(neighbors)
+    if not adj:
+        return 0.0
+    return _modularity(adj, loops, {index[node]: labels[node] for node in index})
+
+
+def shape(neighbors, labels):
+    """Graph statistics the tools print alongside results, as their own caveat.
+
+    Hundreds of tiny components, or a modularity near zero, means the cluster
+    columns are noise and should be ignored.
+    """
+    groups = components(neighbors)
+    sizes = {}
+    for cluster_id in labels.values():
+        sizes[cluster_id] = sizes.get(cluster_id, 0) + 1
+    return {
+        "notes": len(neighbors),
+        "edges": sum(len(n) for n in neighbors.values()) // 2,
+        "components": len(groups),
+        "largest_component": len(groups[0]) if groups else 0,
+        "isolated": sum(1 for group in groups if len(group) == 1),
+        "clusters": len(sizes),
+        "largest_cluster": max(sizes.values()) if sizes else 0,
+        "modularity": round(modularity(neighbors, labels), 4),
+    }
+
+
+def describe_shape(summary):
+    """shape() as a single line for a text report."""
+    return (
+        f"graph: {summary['notes']} notes, {summary['edges']} links, "
+        f"{summary['components']} components (largest {summary['largest_component']}, "
+        f"{summary['isolated']} isolated) — {summary['clusters']} clusters, "
+        f"modularity {summary['modularity']:.3f}"
+    )

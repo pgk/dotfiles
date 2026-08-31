@@ -8,26 +8,11 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import notes_cluster
 import notes_common
 
 
-def build_graph(files, name_index):
-    graph = {path: {"neighbors": set(), "broken_links": []} for path in files}
-    for path in files:
-        try:
-            with open(path, "r", encoding="utf-8", errors="replace") as f:
-                text = f.read()
-        except OSError as exc:
-            print(f"warning: skipping unreadable note {path}: {exc}", file=sys.stderr)
-            continue
-        for link_text in notes_common.extract_links(text):
-            target = notes_common.resolve_link(link_text, name_index)
-            if target is None:
-                graph[path]["broken_links"].append(link_text)
-            elif target != path:
-                graph[path]["neighbors"].add(target)
-                graph[target]["neighbors"].add(path)
-    return graph
+build_graph = notes_cluster.build_graph
 
 
 def note_entry(path, graph):
