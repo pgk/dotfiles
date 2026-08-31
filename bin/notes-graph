@@ -12,9 +12,6 @@ import notes_cluster
 import notes_common
 
 
-build_graph = notes_cluster.build_graph
-
-
 def note_entry(path, graph):
     return {
         "name": os.path.splitext(os.path.basename(path))[0],
@@ -42,13 +39,14 @@ def classify(graph, min_links):
 
 
 def format_group(title, entries, vault):
+    printable = notes_common.printable
     lines = [f"{title} ({len(entries)})"]
     for e in entries:
-        rel = os.path.relpath(e["path"], vault)
+        rel = printable(os.path.relpath(e["path"], vault))
         plural = "link" if e["degree"] == 1 else "links"
-        line = f"  {e['name']}  [{e['degree']} {plural}]  {rel}"
+        line = f"  {printable(e['name'])}  [{e['degree']} {plural}]  {rel}"
         if e["broken_links"]:
-            line += "  (broken: " + ", ".join(f"[[{b}]]" for b in e["broken_links"]) + ")"
+            line += "  (broken: " + ", ".join(f"[[{printable(b)}]]" for b in e["broken_links"]) + ")"
         lines.append(line)
     return lines
 
@@ -114,7 +112,7 @@ def main(argv=None):
 
     files = list(notes_common.iter_markdown_files(vault, args.exclude or []))
     name_index = notes_common.build_name_index(files)
-    graph = build_graph(files, name_index)
+    graph = notes_cluster.build_graph(files, name_index)
     orphans, sparse = classify(graph, args.min_links)
 
     if args.json:

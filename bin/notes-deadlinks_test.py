@@ -275,7 +275,7 @@ class CliSubprocessTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("VAULT path is required", result.stderr)
         self.assertEqual(result.stdout, "")
-        self.assertNotIn("canary", result.stdout)
+        self.assertNotIn("canary", result.stdout + result.stderr)
 
     def test_bare_invocation_names_no_vault(self):
         env = {**os.environ}

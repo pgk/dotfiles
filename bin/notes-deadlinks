@@ -19,7 +19,11 @@ def collect_dead_links(files, name_index):
             with open(path, "r", encoding="utf-8", errors="replace") as f:
                 text = f.read()
         except OSError as exc:
-            print(f"warning: skipping unreadable note {path}: {exc}", file=sys.stderr)
+            print(
+                f"warning: skipping unreadable note {notes_common.printable(path)}: "
+                f"{notes_common.printable(exc)}",
+                file=sys.stderr,
+            )
             continue
         dead = {
             link_text

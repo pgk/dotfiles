@@ -32,6 +32,7 @@ loader.exec_module(notes_similar)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import notes_common
 import notes_embed_cache
+import notes_similar_report
 
 
 def write_vault(root, files):
@@ -216,7 +217,7 @@ class ClusterRankingTests(unittest.TestCase):
         clusters, shape = notes_similar.cluster_notes(notes, name_index)
         target = notes_similar.resolve_target(target_name, notes, name_index)
         results = notes_similar.find_similar(
-            target, notes, cached, name_index, 10, False, clusters, bridge_first
+            target, notes, cached, name_index, 10, False, clusters=clusters, bridge_first=bridge_first
         )
         return results, clusters, shape
 
@@ -231,7 +232,7 @@ class ClusterRankingTests(unittest.TestCase):
         results, _, _ = self.rank()
         names = [r["name"] for r in results]
         self.assertLess(names.index("b1"), names.index("a3"))
-        # a3 is the most similar note of all, so it topping nothing is the point.
+        # a3 is the most similar note of all, so it losing the top slot is the point.
         self.assertTrue(results[0]["crosses"])
         self.assertEqual(names[-1], "a3")
 
@@ -249,18 +250,46 @@ class ClusterRankingTests(unittest.TestCase):
         self.assertEqual(len({by_name["a3"]["cluster"], by_name["b1"]["cluster"]}), 2)
         self.assertEqual(len(clusters), len(CLUSTER_VAULT))
 
+    def test_the_limit_applies_to_each_group_separately(self):
+        # The cross-cluster pool is far larger in any real vault, so a shared
+        # limit would leave no within-cluster hits to compare against.
+        notes, name_index, cached = self.prepare(CLUSTER_VAULT)
+        clusters, _ = notes_similar.cluster_notes(notes, name_index)
+        target = notes_similar.resolve_target("t", notes, name_index)
+        results = notes_similar.find_similar(
+            target, notes, cached, name_index, 1, False, clusters=clusters, bridge_first=True
+        )
+        self.assertEqual([r["crosses"] for r in results], [True, False])
+        self.assertEqual(results[1]["name"], "a3")
+
+    def test_the_best_same_cluster_hit_survives_the_limit(self):
+        results, _, _ = self.rank()
+        self.assertIn("a3", [r["name"] for r in results])
+
+    def test_no_bridge_applies_one_shared_limit(self):
+        notes, name_index, cached = self.prepare(CLUSTER_VAULT)
+        clusters, _ = notes_similar.cluster_notes(notes, name_index)
+        target = notes_similar.resolve_target("t", notes, name_index)
+        results = notes_similar.find_similar(
+            target, notes, cached, name_index, 1, False, clusters=clusters, bridge_first=False
+        )
+        self.assertEqual([r["name"] for r in results], ["a3"])
+
     def test_within_a_partition_similarity_still_decides(self):
         results, _, _ = self.rank()
         crossing = [r["score"] for r in results if r["crosses"]]
         self.assertEqual(crossing, sorted(crossing, reverse=True))
 
     def test_a_vault_with_no_links_ranks_exactly_as_similarity_alone(self):
-        # Every note is its own cluster, so every pair crosses and the partition
-        # is empty -- the degenerate case a fragmented vault would produce.
+        # Every note is its own cluster, so every pair crosses and the within-cluster
+        # group is empty -- the degenerate case a fragmented vault would produce.
         unlinked = {name: text.split(" [[")[0] for name, text in CLUSTER_VAULT.items()}
-        bridged = [r["name"] for r in self.rank(unlinked)[0]]
+        results = self.rank(unlinked)[0]
+        # Without this, the assertion below would also pass if `crosses` were stuck
+        # at False, which is the opposite failure.
+        self.assertTrue(all(r["crosses"] for r in results))
         plain = [r["name"] for r in self.rank(unlinked, bridge_first=False)[0]]
-        self.assertEqual(bridged, plain)
+        self.assertEqual([r["name"] for r in results], plain)
 
     def test_omitting_cluster_data_falls_back_to_similarity_order(self):
         notes, name_index, cached = self.prepare(CLUSTER_VAULT)
@@ -298,22 +327,61 @@ class ClusterOutputTests(unittest.TestCase):
         row.update(overrides)
         return row
 
+    SHAPE = {
+        "notes": 9, "edges": 4, "components": 3, "largest_component": 5,
+        "isolated": 1, "clusters": 4, "largest_cluster": 5, "modularity": 0.12,
+    }
+
     def test_text_report_marks_a_bridging_hit_with_its_cluster(self):
-        out = notes_similar.format_text({"name": "t"}, [self.result()], 2, False, "/v")
-        self.assertIn("bridges cluster 3", out)
+        out = notes_similar_report.format_text({"name": "t"}, [self.result()], 2, False, "/v")
+        self.assertIn("[cluster 3]", out)
 
     def test_text_report_leaves_same_cluster_hits_unmarked(self):
-        out = notes_similar.format_text(
+        out = notes_similar_report.format_text(
             {"name": "t"}, [self.result(crosses=False)], 2, False, "/v"
         )
-        self.assertNotIn("bridges", out)
+        self.assertNotIn("cluster", out)
+
+    def test_the_two_groups_get_their_own_headings(self):
+        rows = [self.result(), self.result(name="near", crosses=False, cluster=1)]
+        out = notes_similar_report.format_text(
+            {"name": "t"}, rows, 9, False, "/v", self.SHAPE, grouped=True
+        )
+        self.assertIn("Bridging other clusters (1)", out)
+        self.assertIn("Within cluster 1 (1)", out)
+        self.assertLess(out.index("Bridging"), out.index("Within cluster"))
+
+    def test_an_empty_group_gets_no_heading(self):
+        out = notes_similar_report.format_text(
+            {"name": "t"}, [self.result()], 9, False, "/v", self.SHAPE, grouped=True
+        )
+        self.assertIn("Bridging other clusters", out)
+        self.assertNotIn("Within cluster", out)
+
+    def test_ungrouped_rendering_keeps_pure_similarity_order(self):
+        # What --no-bridge renders. Grouping must follow the flag, not the mere
+        # presence of a shape summary, or the flag only half works.
+        rows = [
+            self.result(name="near", score=0.90, crosses=False, cluster=1),
+            self.result(name="far", score=0.50),
+        ]
+        out = notes_similar_report.format_text(
+            {"name": "t"}, rows, 9, False, "/v", self.SHAPE, grouped=False
+        )
+        self.assertNotIn("Bridging", out)
+        self.assertNotIn("Within cluster", out)
+        self.assertLess(out.index("near"), out.index("far"))
+
+    def test_no_headings_when_no_clustering_ran(self):
+        rows = [self.result(crosses=False, cluster=None)]
+        out = notes_similar_report.format_text({"name": "t"}, rows, 9, False, "/v")
+        self.assertNotIn("Bridging", out)
+        self.assertNotIn("Within", out)
 
     def test_text_report_carries_the_graph_shape_as_its_own_caveat(self):
-        shape = {
-            "notes": 9, "edges": 4, "components": 3, "largest_component": 5,
-            "isolated": 1, "clusters": 4, "largest_cluster": 5, "modularity": 0.12,
-        }
-        out = notes_similar.format_text({"name": "t"}, [self.result()], 9, False, "/v", shape)
+        out = notes_similar_report.format_text(
+            {"name": "t"}, [self.result()], 9, False, "/v", self.SHAPE
+        )
         self.assertIn("9 notes", out)
         self.assertIn("3 components", out)
         self.assertIn("0.120", out)
@@ -322,7 +390,7 @@ class ClusterOutputTests(unittest.TestCase):
         shape = {"notes": 2, "edges": 1, "components": 1, "largest_component": 2,
                  "isolated": 0, "clusters": 1, "largest_cluster": 2, "modularity": 0.0}
         payload = json.loads(
-            notes_similar.format_json(
+            notes_similar_report.format_json(
                 {"name": "t", "path": "/v/t.md"}, [self.result()], False, "/v", "m", shape=shape
             )
         )
@@ -332,7 +400,7 @@ class ClusterOutputTests(unittest.TestCase):
 
     def test_json_shape_is_null_when_embeddings_were_unavailable(self):
         payload = json.loads(
-            notes_similar.format_json(None, [], False, "/v", "m", error="down")
+            notes_similar_report.format_json(None, [], False, "/v", "m", error="down")
         )
         self.assertIsNone(payload["shape"])
 
@@ -351,12 +419,12 @@ class FormatTextTests(unittest.TestCase):
                 "preview": "p\x1bq",
             }
         ]
-        out = notes_similar.format_text(target, results, 2, False, "/v")
+        out = notes_similar_report.format_text(target, results, 2, False, "/v")
         for bad in ("\x1b", "\x07"):
             self.assertNotIn(bad, out)
 
     def test_empty_results_still_name_the_target(self):
-        out = notes_similar.format_text({"name": "solo"}, [], 7, False, "/v")
+        out = notes_similar_report.format_text({"name": "solo"}, [], 7, False, "/v")
         self.assertIn("solo", out)
         self.assertIn("7", out)
 
@@ -365,7 +433,7 @@ class FormatJsonTests(unittest.TestCase):
     def test_control_characters_are_stripped_from_names_and_previews(self):
         target = {"name": "tar\x1bget", "path": "/v/t.md"}
         results = [{"name": "ev\x07il", "path": "/v/e.md", "score": 0.5, "linked": False, "preview": "p\x1bq"}]
-        payload = json.loads(notes_similar.format_json(target, results, False, "/v", "m"))
+        payload = json.loads(notes_similar_report.format_json(target, results, False, "/v", "m"))
         self.assertNotIn("\x1b", payload["target"]["name"])
         self.assertNotIn("\x07", payload["similar"][0]["name"])
         self.assertNotIn("\x1b", payload["similar"][0]["preview"])

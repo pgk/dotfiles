@@ -16,19 +16,19 @@ local function describe(entry, vault)
   local rel = sanitize(entry.path:gsub("^" .. vim.pesc(vault) .. "/", ""))
   local label = sanitize(entry.name)
     .. (entry.linked and " [linked]" or "")
-    .. (entry.crosses and " [bridge]" or "")
+    .. (entry.crosses and type(entry.cluster) == "number" and (" [cluster " .. entry.cluster .. "]") or "")
   return string.format("%.4f  %-38s %-40s %s", entry.score, label, sanitize(entry.preview), rel)
 end
 
 -- The clustering is never tuned against the real vault, so the picker shows the
 -- graph it ran on: many tiny components, or a modularity near zero, means the
--- [bridge] marks are noise.
+-- [cluster N] marks are noise.
 local function header_for(shape)
   if type(shape) ~= "table" then
     return nil
   end
   return string.format(
-    "%d notes, %d links, %d components (largest %d) | %d clusters, modularity %.3f",
+    "%d notes, %d links, %d components, largest %d -- %d clusters, modularity %.3f",
     shape.notes or 0,
     shape.edges or 0,
     shape.components or 0,

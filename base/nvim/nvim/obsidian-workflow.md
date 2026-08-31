@@ -143,8 +143,16 @@ never made:
   on the two notes using the same vocabulary
 - Notes already linked in **either** direction are filtered out, so every row is a
   connection you don't have yet
-- Results open in an fzf-lua picker sorted by similarity. `<CR>` opens the note so
-  you can read it first; `<C-y>` inserts `[[the-note]]` at your cursor instead
+- Rows that **bridge clusters** come first, marked `[cluster N]`. A similar note
+  already sitting in the current note's own neighbourhood mostly restates a
+  connection the graph has; one from a different cluster is a link the vault
+  doesn't have any route to. Within-cluster hits still follow, under their own
+  limit, so you can see both — the comparison is the point
+- The picker header states the graph the clustering ran on: components, cluster
+  count and modularity. Many tiny components, or a modularity near zero, means
+  there are no real clusters and the `[cluster N]` marks are noise
+- Results open in an fzf-lua picker. `<CR>` opens the note so you can read it
+  first; `<C-y>` inserts `[[the-note]]` at your cursor instead
 
 ### Setup
 
@@ -172,6 +180,10 @@ async, so neither command blocks the editor.
 If the embedding model is ever swapped for one with a different vector size,
 `:ObsidianSimilarIndex!` (or `notes-similar --index --rebuild <vault>`) discards
 the cache and starts over.
+
+Clustering itself needs no server and no index — it reads only the wikilink
+graph. `notes-similar --no-bridge` turns the grouping off and ranks purely by
+similarity.
 
 ### Where your notes go
 

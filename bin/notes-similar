@@ -4,7 +4,6 @@
 
 import argparse
 import hashlib
-import json
 import math
 import os
 import sys
@@ -14,6 +13,7 @@ import notes_cluster
 import notes_common
 import notes_embed_cache
 import notes_embed_client
+import notes_similar_report
 
 EmbedUnavailable = notes_embed_cache.EmbedUnavailable
 _printable = notes_common.printable
@@ -98,7 +98,7 @@ def linked_paths(target, notes, name_index):
     return linked
 
 
-def find_similar(target, notes, cached, name_index, limit, include_linked, clusters=None, bridge_first=True):
+def find_similar(target, notes, cached, name_index, limit, include_linked, *, clusters=None, bridge_first=True):
     target_vec = cached.get((target["path"], target["hash"]))
     if target_vec is None:
         raise EmbedUnavailable(f"no embedding for target note: {_printable(target['name'])}")
@@ -130,17 +130,18 @@ def find_similar(target, notes, cached, name_index, limit, include_linked, clust
                 "preview": preview_of(note["text"]),
             }
         )
+    results.sort(key=lambda r: (-r["score"], r["name"].lower()))
+    if not bridge_first:
+        return results[:limit]
     # Cross-cluster pairs first: a link into a neighbourhood the target is already
     # part of adds little, while one that bridges clusters is structurally novel.
-    # Deliberately a hard partition rather than a weighted blend — a weight would
-    # be a number tuned against a vault that is never measured. It also degrades
-    # gracefully: if every pair crosses (a fragmented vault) or none does (one
-    # giant cluster), the partition is empty and this is pure similarity order.
-    def rank(r):
-        return (not (bridge_first and r["crosses"]), -r["score"], r["name"].lower())
-
-    results.sort(key=rank)
-    return results[:limit]
+    # A hard partition rather than a weighted blend, because a weight would be a
+    # number tuned against a vault that is never measured — but the limit applies
+    # to each side separately, or the far larger cross-cluster pool would bury the
+    # within-cluster hits entirely and there would be nothing to compare against.
+    crossing = [r for r in results if r["crosses"]]
+    within = [r for r in results if not r["crosses"]]
+    return crossing[:limit] + within[:limit]
 
 
 def cluster_notes(notes, name_index):
@@ -160,44 +161,6 @@ def resolve_target(spec, notes, name_index):
     return by_path.get(path) if path else None
 
 
-def format_text(target, results, total, include_linked, vault, shape=None):
-    name = _printable(target["name"])
-    if not results:
-        scope = "similar" if include_linked else "unlinked similar"
-        return f"No {scope} notes found for '{name}' among {total} notes in {vault}."
-    scope = "Similar" if include_linked else "Unlinked similar"
-    lines = [f"{scope} to '{name}' ({len(results)} of {total} notes in {vault})"]
-    if shape:
-        lines.append(notes_cluster.describe_shape(shape))
-    lines.append("")
-    for r in results:
-        rel = _printable(os.path.relpath(r["path"], vault))
-        mark = " [linked]" if r["linked"] else ""
-        if r["crosses"]:
-            mark += f" [bridges cluster {r['cluster']}]"
-        lines.append(f"  {r['score']:.4f}  {_printable(r['name'])}{mark}")
-        if r["preview"]:
-            lines.append(f"          {_printable(r['preview'])}")
-        lines.append(f"          {rel}")
-    return "\n".join(lines)
-
-
-def format_json(target, results, include_linked, vault, model, error=None, shape=None):
-    return json.dumps(
-        {
-            "vault": vault,
-            "model": model,
-            "available": error is None,
-            "error": error,
-            "unlinked_only": not include_linked,
-            "shape": shape,
-            "target": {"name": _printable(target["name"]), "path": target["path"]} if target else None,
-            "similar": [dict(r, name=_printable(r["name"]), preview=_printable(r["preview"])) for r in results],
-        },
-        indent=2,
-    )
-
-
 def parse_args(argv):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -209,12 +172,12 @@ def parse_args(argv):
     )
     parser.add_argument("--index", action="store_true", help="Build or refresh the whole embedding index, then exit")
     parser.add_argument("--rebuild", action="store_true", help="With --index, discard the cache and re-embed everything")
-    parser.add_argument("-n", "--limit", type=int, default=10, help="Maximum results to return (default: 10)")
+    parser.add_argument("-n", "--limit", type=int, default=10, help="Maximum results per group, so bridge ranking can return up to twice this; one shared limit under --no-bridge (default: 10)")
     parser.add_argument("--all", action="store_true", help="Include notes already linked to the target")
     parser.add_argument(
         "--no-bridge",
         action="store_true",
-        help="Rank purely by similarity, without floating cluster-crossing pairs above the rest",
+        help="Rank purely by similarity, without grouping cluster-crossing pairs above the rest",
     )
     parser.add_argument("--json", action="store_true", help="Emit JSON instead of a text report")
     parser.add_argument(
@@ -282,7 +245,7 @@ def run_query(args, vault, target_spec, notes, name_index, embedder):
         safe_spec = _printable(target_spec)
         print(f"notes-similar: no note matching '{safe_spec}' in {vault}", file=sys.stderr)
         if args.json:
-            print(format_json(None, [], args.all, vault, args.model, error=f"no note matching '{safe_spec}'"))
+            print(notes_similar_report.format_json(None, [], args.all, vault, args.model, error=f"no note matching '{safe_spec}'"))
         return 1
 
     cdir = notes_embed_cache.cache_dir(vault)
@@ -300,13 +263,18 @@ def run_query(args, vault, target_spec, notes, name_index, embedder):
         notes_embed_cache.save_cache(cdir, args.model, dims, notes, cached)
     clusters, shape = cluster_notes(notes, name_index)
     results = find_similar(
-        target, notes, cached, name_index, args.limit, args.all, clusters, not args.no_bridge
+        target, notes, cached, name_index, args.limit, args.all,
+        clusters=clusters, bridge_first=not args.no_bridge,
     )
 
     if args.json:
-        print(format_json(target, results, args.all, vault, args.model, shape=shape))
+        print(notes_similar_report.format_json(target, results, args.all, vault, args.model, shape=shape))
     else:
-        print(format_text(target, results, len(notes), args.all, vault, shape))
+        print(
+            notes_similar_report.format_text(
+                target, results, len(notes), args.all, vault, shape, grouped=not args.no_bridge
+            )
+        )
     return 0
 
 
@@ -365,7 +333,7 @@ def main(argv=None):
             return 1
         if args.json:
             target = resolve_target(target_spec, notes, name_index)
-            print(format_json(target, [], args.all, vault, args.model, error=str(exc)))
+            print(notes_similar_report.format_json(target, [], args.all, vault, args.model, error=str(exc)))
         else:
             print(f"Embeddings unavailable, no results: {exc}")
         return 0

@@ -59,11 +59,6 @@ def build_graph(files, name_index):
     return {path: {"neighbors": neighbors[path], "broken_links": broken[path]} for path in files}
 
 
-def adjacency(graph):
-    """The plain {path: set(path)} map community detection consumes."""
-    return {path: set(entry["neighbors"]) for path, entry in graph.items()}
-
-
 def components(neighbors):
     """Connected components, each a sorted node list. Largest first, then alphabetical."""
     seen = set()
@@ -93,10 +88,14 @@ def _index_graph(neighbors):
     adj = {i: {} for i in range(len(nodes))}
     for node in nodes:
         u = index[node]
-        for other in neighbors[node]:
+        for other in sorted(neighbors[node]):
             v = index.get(other)
             if v is not None and v != u:
+                # Symmetrised here rather than trusted: louvain(), modularity() and
+                # shape() are public and take a raw neighbour map, and a one-way edge
+                # would otherwise survive to _aggregate's half-edge guard and vanish.
                 adj[u][v] = 1.0
+                adj[v][u] = 1.0
     return nodes, index, adj, {u: 0.0 for u in adj}
 
 
@@ -131,7 +130,12 @@ def _local_moving(adj, loops):
         return community
     tot = dict(degrees)
     improved = True
-    while improved:
+    passes = 0
+    # Equal-gain moves always go to a smaller community id, so the plateau cannot
+    # cycle in exact arithmetic. The cap makes a float edge case cost a slightly
+    # worse partition rather than a hung editor picker.
+    while improved and passes < len(adj):
+        passes += 1
         improved = False
         for u in sorted(adj):
             own = community[u]

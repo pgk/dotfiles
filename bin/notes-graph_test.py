@@ -20,6 +20,7 @@ notes_graph = importlib.util.module_from_spec(spec)
 loader.exec_module(notes_graph)
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import notes_cluster
 import notes_common
 
 
@@ -36,7 +37,7 @@ class GraphBuildingTests(unittest.TestCase):
             write_vault(tmp, files)
             paths = list(notes_common.iter_markdown_files(tmp, excludes or []))
             index = notes_common.build_name_index(paths)
-            graph = notes_graph.build_graph(paths, index)
+            graph = notes_cluster.build_graph(paths, index)
             orphans, sparse = notes_graph.classify(graph, min_links)
             return graph, orphans, sparse
 
@@ -124,7 +125,7 @@ class FormatTextTests(unittest.TestCase):
             write_vault(tmp, {"sub/a.md": "see [[ghost]]"})
             paths = list(notes_common.iter_markdown_files(tmp, []))
             index = notes_common.build_name_index(paths)
-            graph = notes_graph.build_graph(paths, index)
+            graph = notes_cluster.build_graph(paths, index)
             orphans, sparse = notes_graph.classify(graph, 3)
             text = notes_graph.format_text(orphans, sparse, 3, len(paths), tmp)
 
@@ -138,7 +139,7 @@ class FormatTextTests(unittest.TestCase):
             write_vault(tmp, {"a.md": "[[b]]", "b.md": "no links back"})
             paths = list(notes_common.iter_markdown_files(tmp, []))
             index = notes_common.build_name_index(paths)
-            graph = notes_graph.build_graph(paths, index)
+            graph = notes_cluster.build_graph(paths, index)
             orphans, sparse = notes_graph.classify(graph, 2)
             text = notes_graph.format_text(orphans, sparse, 2, len(paths), tmp)
 
@@ -161,7 +162,7 @@ class JsonOutputTests(unittest.TestCase):
             )
             paths = list(notes_common.iter_markdown_files(tmp, []))
             index = notes_common.build_name_index(paths)
-            graph = notes_graph.build_graph(paths, index)
+            graph = notes_cluster.build_graph(paths, index)
             orphans, sparse = notes_graph.classify(graph, 3)
             payload = json.loads(notes_graph.format_json(orphans, sparse, 3, len(paths), tmp))
 
@@ -273,7 +274,7 @@ class CliSubprocessTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("VAULT path is required", result.stderr)
         self.assertEqual(result.stdout, "")
-        self.assertNotIn("canary", result.stdout)
+        self.assertNotIn("canary", result.stdout + result.stderr)
 
     def test_bare_invocation_names_no_vault(self):
         env = {**os.environ}

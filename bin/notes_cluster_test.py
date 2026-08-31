@@ -71,15 +71,6 @@ class BuildGraphTests(unittest.TestCase):
         graph = self.build({"a.md": "[[a]] and [[b]]", "b.md": ""})
         self.assertEqual({Path(p).stem for p in graph["a"]["neighbors"]}, {"b"})
 
-    def test_adjacency_drops_everything_but_neighbours(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write_vault(tmp, {"a.md": "[[b]] [[ghost]]", "b.md": ""})
-            paths = list(notes_common.iter_markdown_files(tmp, []))
-            graph = notes_cluster.build_graph(paths, notes_common.build_name_index(paths))
-            neighbors = notes_cluster.adjacency(graph)
-        self.assertEqual({Path(p).stem for p in neighbors}, {"a", "b"})
-        self.assertTrue(all(isinstance(v, set) for v in neighbors.values()))
-
 
 class AdjacencyFromLinksTests(unittest.TestCase):
     """The in-memory path, for callers like notes-similar that already read the notes."""
@@ -89,7 +80,8 @@ class AdjacencyFromLinksTests(unittest.TestCase):
             write_vault(tmp, {"a.md": "[[b]] [[ghost]]", "b.md": "[[c]]", "c.md": "", "d.md": ""})
             paths = list(notes_common.iter_markdown_files(tmp, []))
             index = notes_common.build_name_index(paths)
-            from_files = notes_cluster.adjacency(notes_cluster.build_graph(paths, index))
+            graph = notes_cluster.build_graph(paths, index)
+            from_files = {path: entry["neighbors"] for path, entry in graph.items()}
             entries = [
                 {"path": p, "links": notes_common.extract_links(Path(p).read_text())}
                 for p in paths
@@ -196,6 +188,14 @@ class LouvainTests(unittest.TestCase):
         labels = notes_cluster.louvain({"a": {"b", "gone"}, "b": {"a"}})
         self.assertEqual(set(labels), {"a", "b"})
 
+    def test_a_one_way_neighbour_map_is_treated_as_an_edge(self):
+        # louvain() is public and takes a raw map; a caller that forgot to
+        # symmetrise must not silently lose the edge.
+        self.assertEqual(
+            grouping(notes_cluster.louvain({"a": {"b"}, "b": set()})), {frozenset("ab")}
+        )
+        self.assertEqual(notes_cluster.shape({"a": {"b"}, "b": set()}, {"a": 0, "b": 0})["edges"], 0)
+
     def test_beats_the_all_in_one_partition_it_starts_from(self):
         labels = notes_cluster.louvain(TWO_TRIANGLES)
         self.assertGreater(notes_cluster.modularity(TWO_TRIANGLES, labels), 0.3)
@@ -275,8 +275,11 @@ class DevVaultFixtureTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         paths = list(notes_common.iter_markdown_files(str(DEV_VAULT), []))
-        graph = notes_cluster.build_graph(paths, notes_common.build_name_index(paths))
-        cls.neighbors = notes_cluster.adjacency(graph)
+        entries = [
+            {"path": p, "links": notes_common.extract_links(Path(p).read_text())} for p in paths
+        ]
+        index = notes_common.build_name_index(paths)
+        cls.neighbors = notes_cluster.adjacency_from_links(entries, index)
         cls.labels = notes_cluster.louvain(cls.neighbors)
         cls.by_name = {Path(p).stem: p for p in paths}
 
@@ -296,9 +299,15 @@ class DevVaultFixtureTests(unittest.TestCase):
         # Three link communities, plus the island, plus the orphan.
         self.assertGreaterEqual(len(set(self.labels.values())), 4)
 
-    def test_the_three_communities_land_in_different_clusters(self):
-        found = {self.cluster_of("hub-note"), self.cluster_of("cluster-b-hub"), self.cluster_of("hubless-one")}
-        self.assertEqual(len(found), 3)
+    def test_each_community_is_cohesive_and_separate_from_the_others(self):
+        # Cohesion is the half that matters: "three distinct ids" alone would also
+        # hold if clustering degenerated to one singleton per note.
+        planning = {self.cluster_of(n) for n in ("hub-note", "project-plan", "meeting-notes", "reading-list")}
+        gardening = {self.cluster_of(f"cluster-b-{n}") for n in ("hub", "one", "two", "three")}
+        harbour = {self.cluster_of(f"hubless-{n}") for n in ("one", "two", "three", "four")}
+        for community in (planning, gardening, harbour):
+            self.assertEqual(len(community), 1)
+        self.assertEqual(len({planning.pop(), gardening.pop(), harbour.pop()}), 3)
 
     def test_the_island_is_its_own_cluster_apart_from_the_rest(self):
         island = {self.cluster_of(n) for n in ("island-one", "island-two", "island-three")}
