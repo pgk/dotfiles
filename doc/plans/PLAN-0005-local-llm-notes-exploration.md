@@ -474,23 +474,29 @@ characters Lua's ASCII-only `%c` misses. One copy in `utils.lua` for all three p
 - **Whether either tool actually helps**, which only real use answers. Both now state
   the graph they ran on (components, clusters, modularity) so their output carries its
   own caveat.
-- **`--exclude` matches only whole relative paths, case-sensitively.** Unfixed, and
-  still the most consequential item: `--exclude journal` silently excludes nothing,
-  and `--exclude` is the only thing keeping a subtree out of `notes-similar`'s upload.
-  Fixing it means deciding whether a bare directory name should exclude its tree and
-  whether matching should be case-insensitive on APFS — a semantic choice.
-- **`json.loads` accepts `NaN`/`Infinity`** and `normalize()` propagates them, so a
-  malfunctioning embedding server writes NaN vectors into `~/.cache/notes-similar/`,
-  where they persist until `--rebuild` and make every score `NaN`. Fix: reject
-  non-finite values in `notes_embed_cache.normalize`.
-- **There are no Lua tests at all.** Three of this round's four security findings were
-  in Lua, and all three would have been caught by tests of `sanitize`, `header_for`
-  and the edit sink. The Python side has equivalents and they did catch their
-  equivalents.
-- `bin/notes-similar_test.py` is 548 lines against the 400-line rule. Pre-existing —
-  it was 577 before this work and the cluster suites were split back out — but it
-  wants breaking up properly.
+All four of the previous round's open items are closed (`1a31d42`):
+
+- **`--exclude` now matches directory names and is case-insensitive**, and warns when
+  a pattern matches nothing. It previously matched only whole relative paths, case
+  sensitively, so `--exclude journal` and `--exclude Journal/*` each silently excluded
+  nothing — on the tool whose `--exclude` is the only thing keeping a subtree out of
+  an HTTP upload. Excluded directories are now pruned from the walk, not filtered
+  after it, so their contents are never read. **This is a behaviour change:** a
+  pattern that used to match nothing may now exclude notes.
+- **Non-finite embeddings are refused** at both the parse (`parse_constant`) and the
+  normalise step. `sqrt(nan)` is not 0, so a NaN slipped past the zero-norm guard into
+  the cache and made every later score `NaN` until `--rebuild`.
+- **`utils_spec.lua`** covers `sanitize` and `edit` with eight plenary specs; reverting
+  either helper to its old form fails three. The picker row builders are still
+  module-local and untested.
+- **No file in `bin/` is over the 400-line limit.** The notes-similar suite is split
+  three ways over a shared `notes_similar_testkit.py`.
+
+Still open:
+
 - Louvain takes 9.6s on a pathological 3,035-note vault (average degree 200); the
-  picker now passes a 30s timeout, which bounds the freeze rather than removing it.
+  picker passes a 30s timeout, which bounds the freeze rather than removing it.
+- `graph.lua`'s `describe`, `describe_cluster` and `header_for` are module-local and
+  untested; export them if their behaviour needs pinning.
 - Embedding-model swap (`bge-m3`) still unscheduled, not closed.
 - `master` is now **9 commits ahead of `origin/master`**, unpushed.
