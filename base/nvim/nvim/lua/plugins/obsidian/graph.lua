@@ -62,7 +62,7 @@ function M.check_health()
         end
         local path = path_by_line[selected[1]]
         if path then
-          vim.cmd.edit(path)
+          vim.cmd("edit " .. vim.fn.fnameescape(path))
         end
       end,
     },
