@@ -17,3 +17,5 @@ cscope.po.out
 .lvimrc.vim
 .vim-bookmarks
 .DS_Store
+
+**/.claude/settings.local.json

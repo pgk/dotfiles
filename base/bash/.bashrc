@@ -325,3 +325,9 @@ command -v docker-compose >/dev/null 2>&1 || {
 command -v nvim >/dev/null 2>&1 && {
   export EDITOR=nvim
 }
+
+if [ -f "$HOME/.bun" ]; then
+  # bun
+  export BUN_INSTALL="$HOME/.bun"
+  export PATH="$BUN_INSTALL/bin:$PATH"
+fi
