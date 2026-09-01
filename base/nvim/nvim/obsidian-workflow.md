@@ -12,14 +12,14 @@ This document describes the custom Obsidian integration for Neovim, built on top
 
 | Key | Command | Description |
 |-----|---------|-------------|
-| `<leader>od` | `:ObsidianToday` | Open today's daily note |
+| `<leader>od` | `:ObsidianDaily` | Open today's daily note (with template) |
 | `<leader>or` | `:ObsidianRandom` | Open a random note |
 | `<leader>ol` | `:ObsidianLinksPanel` | Toggle links panel sidebar |
-| `<leader>os` | `:ObsidianSearch` | Search vault (fulltext) |
-| `<leader>on` | `:ObsidianNew` | Create a new note |
+| `<leader>os` | `:Obsidian search` | Search vault (fulltext) |
+| `<leader>on` | `:Obsidian new` | Create a new note |
 | `<leader>oi` | `:ObsidianInsertLink` | Search vault and insert link at cursor |
-| `<leader>ob` | `:ObsidianBacklinks` | Backlinks in picker |
-| `<leader>of` | `:ObsidianLinks` | Forward links in picker |
+| `<leader>ob` | `:Obsidian backlinks` | Backlinks in picker |
+| `<leader>of` | `:Obsidian links` | Forward links in picker |
 | `<leader>ot` | `:ObsidianTransclusionToggle` | Toggle transclusion rendering |
 | `<leader>oR` | `:ObsidianRename` | Rename note and update all links |
 | `<leader>og` | `:ObsidianGraphHealth` | Find orphans, sparse notes, and clusters with no hub |
@@ -47,18 +47,17 @@ This document describes the custom Obsidian integration for Neovim, built on top
 
 | Command | Description |
 |---------|-------------|
-| `:ObsidianToday [offset]` | Open daily note (offset: -1 = yesterday, 1 = tomorrow) |
 | `:ObsidianRandom` | Open a random note from vault |
 | `:ObsidianLinksPanel` | Toggle the links panel sidebar |
-| `:ObsidianSearch` | Fulltext search across vault |
-| `:ObsidianNew` | Create a new note |
+| `:Obsidian search` | Fulltext search across vault |
+| `:Obsidian new` | Create a new note |
 | `:ObsidianInsertLink` | Search and insert a `[[link]]` at cursor |
 | `:ObsidianDailyReview` | Add 5 random notes to today's daily note |
-| `:ObsidianBacklinks` | Show backlinks in picker (built-in) |
-| `:ObsidianLinks` | Show forward links in picker (built-in) |
+| `:Obsidian backlinks` | Show backlinks in picker (built-in) |
+| `:Obsidian links` | Show forward links in picker (built-in) |
 | `:ObsidianTransclusionToggle` | Toggle inline transclusion rendering |
 | `:ObsidianRename [name]` | Rename current note and update all links |
-| `:ObsidianDaily [offset]` | Open daily note with template (offset: -1 = yesterday) |
+| `:ObsidianDaily [offset]` | Open daily note with template (offset: -1 = yesterday, 1 = tomorrow) |
 | `:ObsidianGraphHealth` | Find orphans, sparse notes, and clusters with no hub (picker) |
 | `:ObsidianActive [7d]` | Notes touched in a recent window, grouped by cluster (picker) |
 | `:ObsidianDeadLinks` | Find dead links and possible matches (picker) |
@@ -133,6 +132,13 @@ vault, at two levels:
   modularity. Many tiny components, or a modularity near zero, means there are no
   real clusters and the `[NO HUB]` rows are noise
 - Select any row to jump to that note
+
+## A note on command names
+
+Commands in the `:Obsidian <subcommand>` form belong to obsidian.nvim itself. The
+`:ObsidianXxx` ones are this config's own — they are ordinary user commands and are
+not affected by the plugin's `legacy_commands` deprecation, which is set to `false`
+here.
 
 ## Recent Activity
 
