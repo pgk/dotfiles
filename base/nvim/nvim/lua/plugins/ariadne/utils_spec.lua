@@ -30,6 +30,60 @@ describe("utils.sample", function()
   end)
 end)
 
+describe("utils.in_vault", function()
+  -- nvim reports buffer names with symlinks resolved, so a vault configured
+  -- through a symlink shared no prefix with its own notes and every gate using
+  -- a bare startswith refused them. These pin the resolved comparison.
+  local real, link
+
+  before_each(function()
+    real = vim.fn.tempname()
+    link = vim.fn.tempname()
+    vim.fn.mkdir(real, "p")
+    vim.fn.mkdir(real .. "/sub", "p")
+    assert(vim.uv.fs_symlink(real, link))
+    vim.fn.writefile({ "Body." }, real .. "/note.md")
+    Obsidian = { dir = link }
+  end)
+
+  after_each(function()
+    Obsidian = nil
+  end)
+
+  it("accepts a note reached through the symlinked vault path", function()
+    assert.is_true(utils.in_vault(link .. "/note.md"))
+  end)
+
+  it("accepts the same note named by its real path", function()
+    assert.is_true(utils.in_vault(real .. "/note.md"))
+  end)
+
+  it("accepts a note not written to disk yet", function()
+    assert.is_true(utils.in_vault(link .. "/brand-new.md"))
+  end)
+
+  it("accepts a note in a subdirectory", function()
+    assert.is_true(utils.in_vault(link .. "/sub/nested.md"))
+  end)
+
+  it("rejects a path outside the vault", function()
+    assert.is_false(utils.in_vault(vim.fn.tempname() .. "/elsewhere.md"))
+  end)
+
+  it("rejects the vault directory itself", function()
+    assert.is_false(utils.in_vault(link))
+  end)
+
+  it("rejects a sibling whose name merely starts with the vault path", function()
+    assert.is_false(utils.in_vault(real .. "-elsewhere/note.md"))
+  end)
+
+  it("rejects nil and the empty string", function()
+    assert.is_false(utils.in_vault(nil))
+    assert.is_false(utils.in_vault(""))
+  end)
+end)
+
 describe("utils.run_ariadne_tool", function()
   local dir, argv_file, notified, real_notify
 

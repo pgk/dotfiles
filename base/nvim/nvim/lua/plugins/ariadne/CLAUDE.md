@@ -98,12 +98,27 @@ Two rules it must keep:
   deciding whether a delete needs confirming, which is why neither is reused
   here. The grep is only a prefilter; it searches the bare name, not `[[name`,
   so those forms reach the exact check at all.
-- **Compare resolved paths.** nvim reports a buffer's name with symlinks
-  resolved, so a vault configured as `/var/...` yields buffers under
-  `/private/var/...` and a plain prefix test fails on a note that really is in
-  the vault. `delete.lua` resolves both sides. `similar.lua` and
-  `commands.smart_follow_link` still do the raw prefix test and would refuse to
-  work on a symlinked vault — untouched here, but wrong.
+- **Ask `utils.in_vault(path)`, never `vim.startswith(path, vault)`.** See
+  "Is this path in the vault?" below.
+
+## Is this path in the vault?
+
+`utils.in_vault(path)` — and nothing else. nvim reports a buffer's name with
+symlinks resolved, so a vault configured through one shares no prefix with its
+own notes: configured as `/var/...`, its buffers arrive as `/private/var/...`,
+and `~/notes -> ~/Dropbox/notes` behaves the same. Three gates compared the two
+raw and so refused every note in a symlinked vault — `:AriadneSimilar`, the
+links panel, and the `formatexpr` that stops `gw` breaking a `[[wiki link]]`
+across lines. `utils.resolve` also resolves the *parent* when the file itself is
+not on disk, so a new note in an unwritten buffer still counts as inside.
+
+`commands.smart_follow_link` is the one place that correctly does not use it. It
+compares a path it just built from `utils.vault_path` against `utils.vault_path`,
+so both sides are unresolved and consistent, and a symlinked vault does not
+affect it. Its check is lexical (`vim.fs.normalize` collapses `..` without
+touching symlinks), which is what stops `[[../../etc/passwd]]`; a symlinked
+*directory inside* the vault could still be followed out, which is exotic enough
+to be left alone deliberately rather than overlooked.
 
 ## Lua tests
 
@@ -125,6 +140,10 @@ tempdir. Run it the same way, swapping the filename.
 `utils_spec.lua` also covers `as_wikilink`, `sample`, `write` and
 `run_ariadne_tool`; the last builds a fake tool on `$PATH` and asserts the argv
 order every caller depends on.
+
+`utils_spec.lua` also pins `in_vault` against a real symlinked tempdir vault,
+including the unwritten-buffer case and a sibling directory whose name merely
+starts with the vault path.
 
 `wikilinks_spec.lua` pins the link grammar — resolution keys, display text and
 unwrapping — against the path, anchor, alias and embed forms. `delete_spec.lua`

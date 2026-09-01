@@ -132,6 +132,34 @@ function M.write(path)
   return true
 end
 
+-- nvim reports a buffer's name with symlinks resolved, so a vault configured
+-- through one shares no prefix with its own notes: a vault at /var/... yields
+-- buffers under /private/var/..., and `~/notes -> ~/Dropbox/notes` does the same.
+-- Resolve anything before comparing it with anything else.
+function M.resolve(path)
+  if type(path) ~= "string" or path == "" then
+    return path
+  end
+  local uv = vim.uv or vim.loop
+  local real = uv.fs_realpath(path)
+  if real then
+    return real
+  end
+  -- Not on disk yet -- a new note in an unwritten buffer. The symlink is on the
+  -- directory, which does exist, so resolving that still places the file.
+  local dir = uv.fs_realpath(vim.fn.fnamemodify(path, ":h"))
+  return dir and (dir .. "/" .. vim.fn.fnamemodify(path, ":t")) or path
+end
+
+-- Whether `path` is a file inside the vault. Both sides resolved, so this is the
+-- only correct way to ask; a bare `vim.startswith(path, vault)` is not.
+function M.in_vault(path)
+  if type(path) ~= "string" or path == "" then
+    return false
+  end
+  return vim.startswith(M.resolve(path), M.resolve(M.vault_path) .. "/")
+end
+
 setmetatable(M, {
   __index = function(_, key)
     if key == "vault_path" then

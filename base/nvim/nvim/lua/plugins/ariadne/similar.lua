@@ -114,7 +114,7 @@ function M.find_similar()
   local current = vim.api.nvim_buf_get_name(0)
   local vault = utils.vault_path
 
-  if current == "" or not vim.startswith(current, vault .. "/") then
+  if not utils.in_vault(current) then
     vim.notify("Current buffer is not a note in " .. vault, vim.log.levels.WARN)
     return
   end

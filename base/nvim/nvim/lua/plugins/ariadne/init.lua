@@ -54,7 +54,7 @@ return {
         vim.opt_local.showbreak = "↳ "
         vim.opt_local.textwidth = 0 -- Don't hard wrap
         local filepath = vim.api.nvim_buf_get_name(0)
-        if vim.startswith(filepath, utils.vault_path .. "/") then
+        if utils.in_vault(filepath) then
           vim.opt_local.formatexpr = "v:lua.require'plugins.ariadne.format'.formatexpr()"
         end
         vim.keymap.set("n", "gf", commands.smart_follow_link, { buffer = true, desc = "Smart follow link" })

@@ -5,19 +5,10 @@ local wikilinks = require("plugins.ariadne.wikilinks")
 local M = {}
 
 local sanitize = utils.sanitize
+-- Every path comparison below is between resolved paths; see utils.resolve.
+local resolved = utils.resolve
 local TRASH = ".trash"
 local LISTED = 8
-
--- nvim resolves a buffer's name through symlinks, so the buffer path and a
--- configured vault path need not share a prefix even when the file really is in
--- the vault -- on macOS a vault under /var is reported under /private/var. Every
--- comparison here is between resolved paths for that reason.
-local function resolved(path)
-  if type(path) ~= "string" or path == "" then
-    return path
-  end
-  return ((vim.uv or vim.loop).fs_realpath(path)) or path
-end
 
 local function read_file(path)
   local f = io.open(path, "r")

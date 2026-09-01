@@ -30,7 +30,7 @@ local function update_panel()
   local current_file = vim.api.nvim_buf_get_name(current_buf)
 
   -- Only update for markdown files in vault
-  if not current_file:match("%.md$") or not vim.startswith(current_file, utils.vault_path .. "/") then
+  if not current_file:match("%.md$") or not utils.in_vault(current_file) then
     vim.api.nvim_buf_set_option(M.state.buf, "modifiable", true)
     vim.api.nvim_buf_set_lines(M.state.buf, 0, -1, false, { "  Not in vault" })
     vim.api.nvim_buf_set_option(M.state.buf, "modifiable", false)
