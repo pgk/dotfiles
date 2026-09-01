@@ -125,6 +125,15 @@ Each cluster is given deliberately distinct vocabulary (planning, gardening,
 harbours, pottery) so `notes-similar` separates them too, not just the link
 graph.
 
+Splittable-note cases, for `notes_splittable.py` (`notes-graph`'s "Splittable"
+section): `splittable-candidate` is long and multi-section, links out to only
+`hub-note`, and should be flagged. `splittable-index` links to exactly eight
+`splittable-index-target-*` stubs, putting its out-degree exactly at the
+`--max-out-degree` default (8) — the gate is `< max`, not `<=`, so this is the
+boundary case proving the map-of-content veto fires and must not be flagged
+despite having headers of its own. Keep the target count at exactly eight if
+this fixture is ever edited.
+
 **Adding files.** More *synthetic notes* are fine and expected — the fixture
 grew for exactly this reason, and it will grow again. Don't add a `README.md`
 or any other non-note file: every `.md` file here is scanned by the tools, so

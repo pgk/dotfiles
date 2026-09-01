@@ -27,6 +27,11 @@ hazard was noticed still sitting in both. See
 `../base/nvim/nvim/lua/plugins/obsidian/CLAUDE.md` for the full rule and why
 it exists.
 
+`notes-embed-setup` is the exception: it never touches the vault at all. It only
+ensures `notes-similar`'s Ollama embedding model is pulled, shelling out to
+`ollama list`/`ollama pull` — no `notes_common` import, no vault argument, by
+design.
+
 ## `--exclude`
 
 `notes_common.matched_excludes()` tests a pattern against a note's relative path

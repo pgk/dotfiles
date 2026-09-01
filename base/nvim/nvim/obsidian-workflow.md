@@ -22,8 +22,9 @@ This document describes the custom Obsidian integration for Neovim, built on top
 | `<leader>of` | `:Obsidian links` | Forward links in picker |
 | `<leader>ot` | `:ObsidianTransclusionToggle` | Toggle transclusion rendering |
 | `<leader>oR` | `:ObsidianRename` | Rename note and update all links |
-| `<leader>og` | `:ObsidianGraphHealth` | Find orphans, sparse notes, and clusters with no hub |
+| `<leader>og` | `:ObsidianGraphHealth` | Find orphans, sparse notes, splittable notes, and clusters with no hub |
 | `<leader>oa` | `:ObsidianActive` | Notes touched recently, grouped by link community |
+| `<leader>oh` | `:ObsidianHelp` | Open this doc |
 | `<leader>oD` | `:ObsidianDeadLinks` | Find dead links and possible matches |
 | `<leader>oS` | `:ObsidianSimilar` | Find semantically similar but unlinked notes |
 
@@ -58,8 +59,9 @@ This document describes the custom Obsidian integration for Neovim, built on top
 | `:ObsidianTransclusionToggle` | Toggle inline transclusion rendering |
 | `:ObsidianRename [name]` | Rename current note and update all links |
 | `:ObsidianDaily [offset]` | Open daily note with template (offset: -1 = yesterday, 1 = tomorrow) |
-| `:ObsidianGraphHealth` | Find orphans, sparse notes, and clusters with no hub (picker) |
+| `:ObsidianGraphHealth` | Find orphans, sparse notes, splittable notes, and clusters with no hub (picker) |
 | `:ObsidianActive [7d]` | Notes touched in a recent window, grouped by cluster (picker) |
+| `:ObsidianHelp` | Open this doc |
 | `:ObsidianDeadLinks` | Find dead links and possible matches (picker) |
 | `:ObsidianSimilar` | Find semantically similar but unlinked notes (picker) |
 | `:ObsidianSimilarIndex[!]` | Refresh the embedding index in the background (`!` rebuilds from scratch) |
@@ -130,9 +132,17 @@ Use `<leader>oR` or `:ObsidianRename` to rename the current note:
 Use `<leader>og` or `:ObsidianGraphHealth` to find structural problems in the
 vault, at two levels:
 - Backed by the `notes-graph` CLI tool (`bin/notes-graph` in dotfiles). It reads
-  only the link graph — no embedding server, no network
+  only the link graph and note text — no embedding server, no network, no LLM
 - **Per note:** orphans have zero `[[links]]` in or out; sparse notes are below
-  the connection threshold (default: 3, see `notes-graph --help`)
+  the connection threshold (default: 3, see `notes-graph --help`); `[SPLIT]`
+  rows are notes that have grown past one idea's worth of content — at least 3
+  `##`/`###` sections, or 1200+ words for headerless sprawl — and aren't
+  themselves acting as a map of content (8+ outbound links vetoes the flag).
+  It's a structural signal only: no claim about where one idea ends, just
+  that the note is long/multi-section and not an index. The `notes-graph` CLI
+  report (not the picker, which shows only the counts) lists the note's own
+  section titles as candidate split points; nothing is ever split
+  automatically. Tune with `--min-headers` / `--min-words` / `--max-out-degree`
 - **Per cluster:** `[NO HUB]` rows are link communities that no note links to
   enough of to serve as a way in. That is an actionable "write a map of content
   here". A note that indexes its cluster reaches all of it; the threshold is half
@@ -219,6 +229,11 @@ Similarity needs a local embedding server. With [Ollama](https://ollama.com):
 ollama pull embeddinggemma
 notes-similar --index ~/notes    # or: export NOTES_VAULT="$HOME/notes"
 ```
+
+`notes-embed-setup` automates that first line: pulls the model if it's
+missing, or with `--check` just reports whether it is. Ollama-only (shells
+out to `ollama list`/`ollama pull`); on LM Studio or `llama-server`, pull the
+model through that tool's own UI or CLI instead.
 
 `embeddinggemma` is multilingual, which matters for the non-English notes in the
 vault. Any OpenAI-compatible server works — point `NOTES_EMBED_URL` at LM Studio
