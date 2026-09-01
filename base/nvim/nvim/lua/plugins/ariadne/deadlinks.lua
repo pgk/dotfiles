@@ -1,5 +1,6 @@
 -- Dead wikilink detection with fuzzy match suggestions, backed by the `ariadne-deadlinks` CLI tool
 local utils = require("plugins.ariadne.utils")
+local cli = require("plugins.ariadne.cli")
 
 local M = {}
 
@@ -10,7 +11,7 @@ end
 local sanitize = utils.sanitize
 
 local function describe(note, dead_link, vault)
-  local rel = sanitize(note.path:gsub("^" .. vim.pesc(vault) .. "/", ""))
+  local rel = cli.relative(note.path, vault)
   local suffix = #dead_link.candidates > 0 and ("possible: " .. table.concat(dead_link.candidates, ", ")) or "no matches"
   return string.format(
     "%-30s [[%s]]  %s  %s",

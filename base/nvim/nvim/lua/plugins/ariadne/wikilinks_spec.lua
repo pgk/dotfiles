@@ -123,3 +123,58 @@ describe("wikilinks.unwrap", function()
     assert.equals("100%1 sure", out)
   end)
 end)
+
+describe("wikilinks.targets", function()
+  it("returns one resolution key per distinct note", function()
+    local keys = wikilinks.targets("[[a]] [[dir/a]] [[a#Top]] [[a|Alias]] [[b]]")
+    assert.same({ "a", "b" }, keys)
+  end)
+
+  it("drops links that name no note", function()
+    assert.same({ "a" }, wikilinks.targets("[[#heading]] [[]] [[a]]"))
+  end)
+
+  it("is empty for text with no links", function()
+    assert.same({}, wikilinks.targets("just prose"))
+  end)
+end)
+
+describe("wikilinks.retarget", function()
+  local function at(text)
+    return (wikilinks.retarget(text, "old", "new"))
+  end
+
+  it("retargets every form that resolves to the note", function()
+    assert.equals("[[new]]", at("[[old]]"))
+    assert.equals("[[new]]", at("[[dir/old]]"))
+    assert.equals("[[new#Top]]", at("[[old#Top]]"))
+    assert.equals("[[new|Alias]]", at("[[old|Alias]]"))
+  end)
+
+  it("keeps an embed an embed", function()
+    -- Dropping the bang would silently demote a transclusion to a link.
+    assert.equals("![[new]]", at("![[old]]"))
+  end)
+
+  it("leaves other notes alone", function()
+    assert.equals("[[old-elsewhere]] [[other]]", at("[[old-elsewhere]] [[other]]"))
+  end)
+
+  it("counts what it rewrote", function()
+    local _, n = wikilinks.retarget("[[old]] [[dir/old]] [[other]]", "old", "new")
+    assert.equals(2, n)
+  end)
+
+  it("refuses a new name that would break out of the link", function()
+    -- "]]" in the name would close the link early and forge a different one.
+    local out, n = wikilinks.retarget("[[old]]", "old", "ev]]il")
+    assert.equals("[[old]]", out)
+    assert.equals(0, n)
+  end)
+
+  it("refuses a new name carrying link syntax of its own", function()
+    for _, bad in ipairs({ "a|b", "a#b", "a[[b" }) do
+      assert.equals(0, select(2, wikilinks.retarget("[[old]]", "old", bad)))
+    end
+  end)
+end)

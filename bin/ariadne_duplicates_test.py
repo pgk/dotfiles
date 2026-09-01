@@ -143,9 +143,9 @@ class BoundsTests(unittest.TestCase):
         self.assertEqual(len(capped), 1)
         self.assertEqual(capped[0]["score"], max(p["score"] for p in every))
 
-    def test_an_absent_limit_keeps_every_candidate(self):
+    def test_a_generous_limit_keeps_every_candidate(self):
         names = ("satisficing", "bounded-rationality", "heuristics")
-        found = self.found({f"{n}.md": SAME_IDEA for n in names})
+        found = self.found({f"{n}.md": SAME_IDEA for n in names}, limit=100)
         self.assertEqual(len(found["possible"]), found["possible_total"])
 
     def test_the_duplicate_list_is_capped_too(self):

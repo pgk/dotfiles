@@ -33,7 +33,7 @@ def title_similarity(a, b):
     return difflib.SequenceMatcher(None, a.casefold(), b.casefold()).ratio()
 
 
-def find_duplicates(notes, cached, *, embed_min=EMBED_MIN, title_min=TITLE_MIN, limit=None):
+def find_duplicates(notes, cached, *, embed_min=EMBED_MIN, title_min=TITLE_MIN, limit=MAX_DUPLICATES):
     """Split the over-`embed_min` pairs into confirmed duplicates and the noisy band.
 
     Quadratic with no index structure: 48s for 4.6M pairs at 3040 notes and 768
@@ -62,6 +62,7 @@ def find_duplicates(notes, cached, *, embed_min=EMBED_MIN, title_min=TITLE_MIN, 
             if score < embed_min:
                 continue
             title = title_similarity(a_name, b_name)
+            is_duplicate = title >= title_min
             pair = {
                 "a": a_name,
                 "a_path": a_path,
@@ -69,25 +70,22 @@ def find_duplicates(notes, cached, *, embed_min=EMBED_MIN, title_min=TITLE_MIN, 
                 "b_path": b_path,
                 "score": round(score, 4),
                 "title": round(title, 4),
-                "verdict": "duplicate" if title >= title_min else "possible",
+                "verdict": "duplicate" if is_duplicate else "possible",
             }
-            if title >= title_min:
+            if is_duplicate:
                 duplicate_total += 1
                 if len(duplicates) < MAX_DUPLICATES:
                     duplicates.append(pair)
             else:
                 possible_total += 1
-                if limit is None:
-                    band.append(pair)
-                else:
-                    # Min-heap on score, so the weakest candidate is the one evicted.
-                    # `seen` only breaks ties; the survivors are sorted properly below.
-                    seen += 1
-                    heapq.heappush(band, (score, seen, pair))
-                    if len(band) > limit:
-                        heapq.heappop(band)
+                # Min-heap on score, so the weakest candidate is the one evicted.
+                # `seen` only breaks ties; the survivors are sorted properly below.
+                seen += 1
+                heapq.heappush(band, (score, seen, pair))
+                if len(band) > limit:
+                    heapq.heappop(band)
 
-    possible = band if limit is None else [entry[2] for entry in band]
+    possible = [entry[2] for entry in band]
     duplicates.sort(key=_rank)
     possible.sort(key=_rank)
     return {

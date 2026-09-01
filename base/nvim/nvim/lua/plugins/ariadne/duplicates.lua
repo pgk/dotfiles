@@ -1,5 +1,6 @@
 -- Near-duplicate note detection, backed by `ariadne-similar --duplicates`
 local utils = require("plugins.ariadne.utils")
+local cli = require("plugins.ariadne.cli")
 
 local M = {}
 
@@ -10,9 +11,6 @@ local sanitize = utils.sanitize
 -- with only the left path shown there is no way to tell where the right-hand
 -- note lives before opening it.
 local function describe(pair, vault)
-  local function rel(path)
-    return sanitize(path:gsub("^" .. vim.pesc(vault) .. "/", ""))
-  end
   local mark = pair.verdict == "duplicate" and "DUP " or "    "
   return string.format(
     "%s%.4f  t%.2f  %-30s <-> %-30s  %s | %s",
@@ -21,8 +19,8 @@ local function describe(pair, vault)
     pair.title,
     sanitize(pair.a),
     sanitize(pair.b),
-    rel(pair.a_path),
-    rel(pair.b_path)
+    cli.relative(pair.a_path, vault),
+    cli.relative(pair.b_path, vault)
   )
 end
 
@@ -107,23 +105,9 @@ local function open_picker(decoded, vault)
 end
 
 local function handle(result, vault)
-  local output = result.stdout or ""
-  local ok, decoded = pcall(vim.json.decode, output)
-  if not ok or type(decoded) ~= "table" or type(decoded.pairs) ~= "table" then
-    local stderr = result.stderr or ""
-    local detail = output ~= "" and output:sub(1, 200)
-      or (stderr ~= "" and stderr:sub(1, 200))
-      or ("exit code " .. tostring(result.code))
-    vim.notify("ariadne-similar --duplicates failed: " .. sanitize(detail), vim.log.levels.ERROR)
+  local decoded = cli.decode("ariadne-similar --duplicates", result, "pairs")
+  if not decoded then
     return
-  end
-
-  if not decoded.available then
-    vim.notify("ariadne-similar: " .. sanitize(decoded.error or "embeddings unavailable"), vim.log.levels.WARN)
-    return
-  end
-  if result.stderr and result.stderr ~= "" then
-    vim.notify("ariadne-similar: " .. sanitize(vim.trim(result.stderr)), vim.log.levels.INFO)
   end
   if #decoded.pairs == 0 then
     vim.notify("No duplicate or near-duplicate notes found", vim.log.levels.INFO)

@@ -182,4 +182,34 @@ describe("delete.delete", function()
     assert.equals(1, vim.fn.filereadable(path))
     assert.is_truthy(notified[#notified]:find("Not a markdown file"))
   end)
+
+  -- The soft delete only works because every vault walker skips dot-directories.
+  -- Nothing on the Lua side pinned that, and all three walkers used to see
+  -- .trash/ -- so a deleted note came back as a random note, as a backlink, and
+  -- as a live link blocking the next delete.
+  it("is invisible to every vault walker once trashed", function()
+    local path = write("gone.md", "Body.\n")
+    write("other.md", "Links to [[gone]].\n")
+    open(path)
+    answer(1, 2) -- delete anyway, leave the links
+    delete.delete()
+
+    local listed = table.concat(utils.list_note_files(), " ")
+    assert.is_nil(listed:find("gone", 1, true))
+    assert.is_nil(utils.find_note_file("gone"))
+    -- other.md still says "gone" (the unwrap was declined), so grep legitimately
+    -- returns it. What must not come back is the trashed file itself.
+    for _, hit in ipairs(utils.grep_note_files("gone")) do
+      assert.is_nil(hit:find(".trash", 1, true))
+    end
+  end)
+
+  it("does not count a link from an already-trashed note", function()
+    write(".trash/dead.md", "Dead note linking [[live]].\n")
+    local path = write("live.md", "Body.\n")
+    open(path)
+    delete.delete()
+    assert.equals(0, #asked)
+    assert.is_truthy(trashed("live.md"))
+  end)
 end)

@@ -10,16 +10,6 @@ local resolved = utils.resolve
 local TRASH = ".trash"
 local LISTED = 8
 
-local function read_file(path)
-  local f = io.open(path, "r")
-  if not f then
-    return nil
-  end
-  local content = f:read("*a")
-  f:close()
-  return content
-end
-
 -- Notes that link to `name`, resolved exactly.
 --
 -- grep is only a prefilter, and it searches for the bare name rather than
@@ -32,7 +22,7 @@ local function linking_notes(path, name)
   local found = {}
   for _, candidate in ipairs(utils.grep_note_files(name, { ignorecase = true })) do
     if resolved(candidate) ~= path then
-      local text = read_file(candidate)
+      local text = utils.read_note(candidate)
       local count = text and wikilinks.count_to(text, name) or 0
       if count > 0 then
         table.insert(found, { path = candidate, name = utils.get_note_name(candidate), count = count })
@@ -82,7 +72,7 @@ end
 local function unwrap_in(linked, name)
   local notes, links = 0, 0
   for _, entry in ipairs(linked) do
-    local text = read_file(entry.path)
+    local text = utils.read_note(entry.path)
     if text then
       local rewritten, n = wikilinks.unwrap(text, name)
       if n > 0 and rewritten ~= text then
@@ -111,7 +101,7 @@ local function validate(path, vault)
   if vim.fn.filereadable(path) == 0 then
     return "No such file on disk"
   end
-  if not vim.startswith(path, vault .. "/") then
+  if not utils.in_vault(path) then
     return "Not a note in " .. vault
   end
   if vim.startswith(path, vault .. "/" .. TRASH .. "/") then

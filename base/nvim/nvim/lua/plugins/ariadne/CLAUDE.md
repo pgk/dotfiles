@@ -84,20 +84,30 @@ Don't fold it into `similar.lua`, and don't make a query pay for it.
 ## Deleting notes
 
 `:AriadneDelete` is the only irreversible-looking command here, so it is a soft
-delete: the note moves to `<vault>/.trash/`, which `iter_markdown_files` skips
-along with every other dot-prefixed directory. Nothing else had to change for it
-to disappear from the graph, the index and the pickers.
+delete: the note moves to `<vault>/.trash/`.
+
+That works only because **every** vault walker skips dot-prefixed directories,
+and there are two sets: `ariadne_common.iter_markdown_files` on the Python side,
+and `find_note_file` / `list_note_files` / `grep_note_files` in `utils.lua`,
+which shell out to `find` and `grep` and needed `DOTDIR_PRUNE` and
+`--exclude-dir=.*` added. They didn't have it at first, so a trashed note came
+back as a random note, as a backlink in the panel, and as a live link blocking
+the next delete. Both sides are now pinned by tests — `ariadne_common_test.py`
+and the two `delete_spec.lua` cases at the end. Don't add a fourth walker
+without the skip.
 
 Two rules it must keep:
 
 - **Resolve links, don't match text.** `wikilinks.key()` mirrors
   `ariadne_common.resolve_link` — basename, no anchor, lowercased — so
-  `[[Dir/A-Note#Top]]` counts as a link to `a-note`. `utils.get_backlinks` and
-  `commands.rewrite_links` both compare the raw bracketed text instead and miss
-  the path and anchor forms. That is survivable for a sidebar and not for
-  deciding whether a delete needs confirming, which is why neither is reused
-  here. The grep is only a prefilter; it searches the bare name, not `[[name`,
-  so those forms reach the exact check at all.
+  `[[Dir/A-Note#Top]]` counts as a link to `a-note`. `commands.rewrite_links`
+  used to compare the raw bracketed text and so missed the path and anchor
+  forms; since `rename` deletes the original, those became dead links, and it
+  now goes through `wikilinks.retarget`. `utils.get_backlinks` still compares
+  the bracketed prefix — survivable for a sidebar, not for a delete gate, which
+  is why `delete.linking_notes` does not reuse it. In both, the grep is only a
+  prefilter and searches the bare name, not `[[name`, so those forms reach the
+  exact check at all.
 - **Ask `utils.in_vault(path)`, never `vim.startswith(path, vault)`.** See
   "Is this path in the vault?" below.
 
@@ -140,6 +150,14 @@ tempdir. Run it the same way, swapping the filename.
 `utils_spec.lua` also covers `as_wikilink`, `sample`, `write` and
 `run_ariadne_tool`; the last builds a fake tool on `$PATH` and asserts the argv
 order every caller depends on.
+
+`cli.lua` holds what the two async tool callers share — the payload decoder, the
+picker header and the vault-relative path — while `utils.run_ariadne_tool` stays
+the synchronous runner. The split is deliberate: `similar.lua` and
+`duplicates.lua` order their argv differently and only one announces itself, so
+an async *runner* at two callers would be a flag per difference. Sharing the
+decoder cost nothing and closed a real gap — `similar.lua`'s `header_for` used
+bare `or 0` where `graph.lua`'s documented that `vim.NIL` throws.
 
 `utils_spec.lua` also pins `in_vault` against a real symlinked tempdir vault,
 including the unwritten-buffer case and a sibling directory whose name merely

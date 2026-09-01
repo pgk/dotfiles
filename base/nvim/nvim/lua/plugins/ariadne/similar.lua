@@ -1,34 +1,17 @@
 -- Semantically similar but unlinked note detection, backed by the `ariadne-similar` CLI tool
 local utils = require("plugins.ariadne.utils")
+local cli = require("plugins.ariadne.cli")
 
 local M = {}
 
 local sanitize = utils.sanitize
 
 local function describe(entry, vault)
-  local rel = sanitize(entry.path:gsub("^" .. vim.pesc(vault) .. "/", ""))
+  local rel = cli.relative(entry.path, vault)
   local label = sanitize(entry.name)
     .. (entry.linked and " [linked]" or "")
     .. (entry.crosses and type(entry.cluster) == "number" and (" [cluster " .. entry.cluster .. "]") or "")
   return string.format("%.4f  %-38s %-40s %s", entry.score, label, sanitize(entry.preview), rel)
-end
-
--- The clustering is never tuned against the real vault, so the picker shows the
--- graph it ran on: many tiny components, or a modularity near zero, means the
--- [cluster N] marks are noise.
-local function header_for(shape)
-  if type(shape) ~= "table" then
-    return nil
-  end
-  return string.format(
-    "%d notes, %d links, %d components, largest %d -- %d clusters, modularity %.3f",
-    shape.notes or 0,
-    shape.edges or 0,
-    shape.components or 0,
-    shape.largest_component or 0,
-    shape.clusters or 0,
-    shape.modularity or 0
-  )
 end
 
 local function open_picker(result, vault, origin)
@@ -42,7 +25,7 @@ local function open_picker(result, vault, origin)
     name_by_line[line] = sanitize(entry.name)
   end
 
-  local header = header_for(result.shape)
+  local header = cli.header_for(result.shape)
   require("fzf-lua").fzf_exec(lines, {
     prompt = "Similar> ",
     fzf_opts = header and { ["--header"] = header } or nil,
@@ -80,28 +63,9 @@ local function open_picker(result, vault, origin)
 end
 
 local function handle(result, vault, origin)
-  local output = result.stdout or ""
-  local ok, decoded = pcall(vim.json.decode, output)
-  if not ok or type(decoded) ~= "table" or type(decoded.similar) ~= "table" then
-    -- Prefer stderr: a crash exits non-zero with an empty stdout, and "(no output)"
-    -- hides the reason. Both streams are CLI-derived, so both get sanitized.
-    local stderr = result.stderr or ""
-    local detail = output ~= "" and output:sub(1, 200)
-      or (stderr ~= "" and stderr:sub(1, 200))
-      or ("exit code " .. tostring(result.code))
-    vim.notify("ariadne-similar failed: " .. sanitize(detail), vim.log.levels.ERROR)
+  local decoded = cli.decode("ariadne-similar", result, "similar")
+  if not decoded then
     return
-  end
-
-  if not decoded.available then
-    -- stderr carries the same reason, so report only the structured one here.
-    vim.notify("ariadne-similar: " .. sanitize(decoded.error or "embeddings unavailable"), vim.log.levels.WARN)
-    return
-  end
-  -- Surfaced only on the success path, where it is not a duplicate of `error`:
-  -- carries the "sending N notes to <endpoint>" egress notice and duplicate-name warnings.
-  if result.stderr and result.stderr ~= "" then
-    vim.notify("ariadne-similar: " .. sanitize(vim.trim(result.stderr)), vim.log.levels.INFO)
   end
   if #decoded.similar == 0 then
     vim.notify("No unlinked similar notes found", vim.log.levels.INFO)

@@ -1,16 +1,10 @@
 -- Orphan, sparse, splittable and hubless-cluster detection, backed by the `ariadne-graph` CLI tool
 local utils = require("plugins.ariadne.utils")
+local cli = require("plugins.ariadne.cli")
 
 local M = {}
 
 local sanitize = utils.sanitize
-
--- Every number below comes from ariadne-graph's own arithmetic, but vim.json.decode
--- maps a JSON null to vim.NIL, which is truthy -- so `x or 0` would pass it
--- straight into string.format and throw.
-local function num(v)
-  return type(v) == "number" and v or 0
-end
 
 local function run_notes_graph()
   return utils.run_ariadne_tool("ariadne-graph", {}, { "orphans", "sparse", "splittable" })
@@ -19,7 +13,7 @@ end
 local function describe(entry, vault)
   local plural = entry.degree == 1 and "link" or "links"
   local status = entry.degree == 0 and "ORPHAN" or "SPARSE"
-  local rel = sanitize(entry.path:gsub("^" .. vim.pesc(vault) .. "/", ""))
+  local rel = cli.relative(entry.path, vault)
   return string.format("[%s] %-30s (%d %s)  %s", status, sanitize(entry.name), entry.degree, plural, rel)
 end
 
@@ -30,22 +24,22 @@ local function describe_cluster(entry)
   return string.format(
     "[NO HUB] %-30s (%d notes, best reaches %d of %d)  %s",
     sanitize(entry.name),
-    num(entry.size),
-    num(entry.reach),
-    num(entry.others),
+    cli.num(entry.size),
+    cli.num(entry.reach),
+    cli.num(entry.others),
     sanitize(entry.rel)
   )
 end
 
 local function describe_splittable(entry)
   local headers = type(entry.headers) == "table" and entry.headers or {}
-  local plural = num(entry.out_degree) == 1 and "link" or "links"
+  local plural = cli.num(entry.out_degree) == 1 and "link" or "links"
   return string.format(
     "[SPLIT] %-30s (%d words, %d sections, %d outbound %s)  %s",
     sanitize(entry.name),
-    num(entry.words),
+    cli.num(entry.words),
     #headers,
-    num(entry.out_degree),
+    cli.num(entry.out_degree),
     plural,
     sanitize(entry.rel)
   )
@@ -54,20 +48,6 @@ end
 -- The clustering is never tuned against the real vault, so the picker shows the
 -- graph it ran on: many tiny components, or a modularity near zero, means the
 -- [NO HUB] rows are noise.
-local function header_for(shape)
-  if type(shape) ~= "table" then
-    return nil
-  end
-  return string.format(
-    "%d notes, %d links, %d components, largest %d -- %d clusters, modularity %.3f",
-    num(shape.notes),
-    num(shape.edges),
-    num(shape.components),
-    num(shape.largest_component),
-    num(shape.clusters),
-    num(shape.modularity)
-  )
-end
 
 function M.check_health()
   local result = run_notes_graph()
@@ -112,7 +92,7 @@ function M.check_health()
     return
   end
 
-  local header = header_for(result.shape)
+  local header = cli.header_for(result.shape)
   require("fzf-lua").fzf_exec(lines, {
     prompt = "Graph health> ",
     fzf_opts = header and { ["--header"] = header } or nil,

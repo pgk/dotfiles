@@ -160,6 +160,36 @@ function M.in_vault(path)
   return vim.startswith(M.resolve(path), M.resolve(M.vault_path) .. "/")
 end
 
+-- Whole-file slurp, nil on any failure. Four modules hand-rolled this.
+function M.read_note(path)
+  local f = io.open(path, "r")
+  if not f then
+    return nil
+  end
+  local text = f:read("*a")
+  f:close()
+  return text
+end
+
+-- A path for `name` inside the vault, or nil if it would escape.
+--
+-- A different question from `in_vault`, which classifies a path nvim handed us.
+-- This one *builds* a path from untrusted text -- a `[[link]]`, or a note name
+-- typed at a prompt -- so `[[../../etc/passwd]]` must not resolve. The check is
+-- lexical on purpose: `vim.fs.normalize` collapses `..` without touching
+-- symlinks, and both sides stay unresolved so they compare consistently.
+function M.vault_child(name)
+  if type(name) ~= "string" or name == "" then
+    return nil
+  end
+  local vault = M.vault_path
+  local path = vim.fs.normalize(vault .. "/" .. name .. ".md")
+  if not vim.startswith(path, vault .. "/") then
+    return nil
+  end
+  return path
+end
+
 setmetatable(M, {
   __index = function(_, key)
     if key == "vault_path" then
@@ -209,7 +239,7 @@ function M.get_backlink_context(filepath, note_name, max_len)
   if not file then
     return ""
   end
-  local pattern = "%[%[" .. note_name:gsub("([%-%.%+%[%]%(%)%$%^%%%?%*])", "%%%1")
+  local pattern = "%[%[" .. M.escape_pattern(note_name)
   for line in file:lines() do
     if line:match(pattern) then
       -- Remove the link itself and clean up
@@ -231,10 +261,18 @@ end
 -- Find a note file by name (case-insensitive), argv-based so link text from a
 -- note buffer can never reach a shell. -quit stops at the first match instead
 -- of walking the whole vault on every call.
+-- Keeps every walker out of dot-directories: `.obsidian/`, and `.trash/`, where
+-- :AriadneDelete puts notes. Without it a deleted note comes back as a random
+-- note, as a backlink in the panel, and as a live link blocking the next delete.
+-- `ariadne_common.iter_markdown_files` enforces the same rule on the Python side;
+-- both are pinned by tests. `-mindepth 1` exempts a dot-named vault root.
+local DOTDIR_PRUNE = { "-mindepth", "1", "-name", ".*", "-prune", "-o" }
+
 function M.find_note_file(name)
-  local result =
-    vim.system({ "find", M.vault_path, "-iname", name .. ".md", "-type", "f", "-print", "-quit" }, { text = true })
-      :wait()
+  local argv = { "find", M.vault_path }
+  vim.list_extend(argv, DOTDIR_PRUNE)
+  vim.list_extend(argv, { "-iname", name .. ".md", "-type", "f", "-print", "-quit" })
+  local result = vim.system(argv, { text = true }):wait()
   if result.code ~= 0 then
     vim.notify("find failed: " .. (result.stderr or ""), vim.log.levels.ERROR)
     return nil
@@ -250,7 +288,8 @@ function M.list_note_files(opts)
   if opts.maxdepth then
     vim.list_extend(argv, { "-maxdepth", tostring(opts.maxdepth) })
   end
-  vim.list_extend(argv, { "-name", opts.name or "*.md", "-type", "f" })
+  vim.list_extend(argv, DOTDIR_PRUNE)
+  vim.list_extend(argv, { "-name", opts.name or "*.md", "-type", "f", "-print" })
   local result = vim.system(argv, { text = true }):wait()
   if result.code ~= 0 then
     vim.notify("find failed: " .. (result.stderr or ""), vim.log.levels.ERROR)
@@ -265,7 +304,10 @@ function M.grep_note_files(search_term, opts)
   opts = opts or {}
   local flags = opts.ignorecase and "-rilF" or "-rlF"
   local result =
-    vim.system({ "grep", flags, "--include=*.md", "--", search_term, M.vault_path }, { text = true }):wait()
+    vim.system(
+      { "grep", flags, "--include=*.md", "--exclude-dir=.*", "--", search_term, M.vault_path },
+      { text = true }
+    ):wait()
   if result.code > 1 then
     vim.notify("grep failed: " .. (result.stderr or ""), vim.log.levels.ERROR)
     return {}
@@ -276,12 +318,10 @@ end
 function M.get_forward_links(filepath)
   local links = {}
   local seen = {}
-  local file = io.open(filepath, "r")
-  if not file then
+  local content = M.read_note(filepath)
+  if not content then
     return links
   end
-  local content = file:read("*a")
-  file:close()
 
   -- Match [[wiki links]] and [[wiki links|alias]]
   for link in content:gmatch("%[%[([^%]|]+)") do
@@ -310,42 +350,6 @@ function M.get_backlinks(filepath)
   end
   table.sort(backlinks, function(a, b) return a.name < b.name end)
   return backlinks
-end
-
-function M.wrap_line(text, width)
-  if #text <= width then
-    return { text }
-  end
-  local lines = {}
-  local current = ""
-  for word in text:gmatch("%S+") do
-    if #current + #word + 1 <= width then
-      current = current == "" and word or (current .. " " .. word)
-    else
-      if current ~= "" then
-        table.insert(lines, current)
-      end
-      current = word
-    end
-  end
-  if current ~= "" then
-    table.insert(lines, current)
-  end
-  return lines
-end
-
-function M.get_line_highlight(line)
-  if line:match("^#+%s") then
-    return "AriadneTransclusionHeader"
-  elseif line:match("^%s*[-*]%s") or line:match("^%s*%d+%.%s") then
-    return "AriadneTransclusionList"
-  elseif line:match("%[%[.+%]%]") or line:match("%[.+%]%(") then
-    return "AriadneTransclusionLink"
-  elseif line:match("%*%*.+%*%*") or line:match("__.+__") then
-    return "AriadneTransclusionBold"
-  else
-    return "AriadneTransclusionContent"
-  end
 end
 
 function M.escape_pattern(s)

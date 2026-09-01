@@ -3,6 +3,43 @@ local utils = require("plugins.ariadne.utils")
 
 local M = {}
 
+-- Moved from utils.lua: transclusion is the only caller of either.
+local function wrap_line(text, width)
+  if #text <= width then
+    return { text }
+  end
+  local lines = {}
+  local current = ""
+  for word in text:gmatch("%S+") do
+    if #current + #word + 1 <= width then
+      current = current == "" and word or (current .. " " .. word)
+    else
+      if current ~= "" then
+        table.insert(lines, current)
+      end
+      current = word
+    end
+  end
+  if current ~= "" then
+    table.insert(lines, current)
+  end
+  return lines
+end
+
+local function get_line_highlight(line)
+  if line:match("^#+%s") then
+    return "AriadneTransclusionHeader"
+  elseif line:match("^%s*[-*]%s") or line:match("^%s*%d+%.%s") then
+    return "AriadneTransclusionList"
+  elseif line:match("%[%[.+%]%]") or line:match("%[.+%]%(") then
+    return "AriadneTransclusionLink"
+  elseif line:match("%*%*.+%*%*") or line:match("__.+__") then
+    return "AriadneTransclusionBold"
+  else
+    return "AriadneTransclusionContent"
+  end
+end
+
 local ns = vim.api.nvim_create_namespace("ariadne_transclusion")
 M.enabled = false
 
@@ -68,8 +105,8 @@ function M.render()
         table.insert(virt_lines, { { "  ┌─ " .. note_name .. " ", "AriadneTransclusionBorder" } })
         -- Content lines with wrapping and highlighting
         for _, content_line in ipairs(content) do
-          local hl = utils.get_line_highlight(content_line)
-          local wrapped = utils.wrap_line(content_line, wrap_width)
+          local hl = get_line_highlight(content_line)
+          local wrapped = wrap_line(content_line, wrap_width)
           for wi, wline in ipairs(wrapped) do
             local prefix = wi == 1 and "  │ " or "  │   "
             table.insert(virt_lines, { { prefix .. wline, hl } })

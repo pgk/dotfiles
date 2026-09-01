@@ -1,6 +1,7 @@
 -- Daily notes for the Ariadne notes workflow
 local utils = require("plugins.ariadne.utils")
 local anniversary = require("plugins.ariadne.anniversary")
+local wikilinks = require("plugins.ariadne.wikilinks")
 
 local M = {}
 
@@ -164,12 +165,10 @@ function M.add_review()
 
   -- Get existing links in daily note to avoid duplicates
   local existing_links = {}
-  local daily_file_read = io.open(daily_note_path, "r")
-  if daily_file_read then
-    local content = daily_file_read:read("*a")
-    daily_file_read:close()
-    for link in content:gmatch("%[%[([^%]|]+)") do
-      existing_links[link] = true
+  local content = utils.read_note(daily_note_path)
+  if content then
+    for _, key in ipairs(wikilinks.targets(content)) do
+      existing_links[key] = true
     end
   end
 

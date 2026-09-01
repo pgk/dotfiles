@@ -10,18 +10,15 @@ local M = {}
 -- The whole span, brackets and any leading `!` included, so a match can be
 -- replaced rather than only found. The inner class excludes both brackets, so
 -- an unclosed `[[` is left alone instead of swallowing the rest of the note.
-M.SPAN = "!?%[%[([^%[%]]*)%]%]"
+-- The bang is captured, not just matched: `retarget` has to put it back, or
+-- rewriting `![[old]]` would silently demote an embed to a plain link.
+M.SPAN = "(!?)%[%[([^%[%]]*)%]%]"
 
 local function split(inner)
   local target, alias = inner:match("^(.-)|(.*)$")
-  if not target then
-    target, alias = inner, nil
-  end
+  target = target or inner
   local head, anchor = target:match("^(.-)#(.*)$")
-  if not head then
-    head, anchor = target, nil
-  end
-  return head, anchor, alias
+  return head or target, anchor, alias
 end
 
 local function basename(path)
@@ -31,7 +28,7 @@ end
 -- The key a link resolves by: basename, no anchor, lowercased. Empty for a link
 -- that names no note, such as the same-note `[[#heading]]`.
 function M.key(inner)
-  local head = select(1, split(inner))
+  local head = split(inner)
   return vim.trim(basename(head)):lower()
 end
 
@@ -51,7 +48,7 @@ end
 function M.count_to(text, name)
   local wanted = vim.trim(name):lower()
   local n = 0
-  for inner in text:gmatch(M.SPAN) do
+  for _, inner in text:gmatch(M.SPAN) do
     if M.key(inner) == wanted then
       n = n + 1
     end
@@ -64,12 +61,51 @@ end
 function M.unwrap(text, name)
   local wanted = vim.trim(name):lower()
   local n = 0
-  local out = text:gsub(M.SPAN, function(inner)
+  local out = text:gsub(M.SPAN, function(_, inner)
     if M.key(inner) ~= wanted then
       return nil -- gsub keeps the original span
     end
     n = n + 1
     return M.display(inner)
+  end)
+  return out, n
+end
+
+-- Every distinct note this text links to, as resolution keys.
+function M.targets(text)
+  local keys, seen = {}, {}
+  for _, inner in text:gmatch(M.SPAN) do
+    local key = M.key(inner)
+    if key ~= "" and not seen[key] then
+      seen[key] = true
+      table.insert(keys, key)
+    end
+  end
+  return keys
+end
+
+-- Point every link resolving to `old` at `new`, keeping the anchor, the alias
+-- and the embed bang. Returns the new text and the count. Refuses a `new`
+-- containing a bracket for the reason `utils.as_wikilink` documents: a "]]" in
+-- the name would close the link early and forge a link to something else.
+function M.retarget(text, old, new)
+  if new:find("[%[%]|#]") then
+    return text, 0
+  end
+  local wanted = vim.trim(old):lower()
+  local n = 0
+  local out = text:gsub(M.SPAN, function(bang, inner)
+    if M.key(inner) ~= wanted then
+      return nil
+    end
+    local _, anchor, alias = split(inner)
+    n = n + 1
+    return bang
+      .. "[["
+      .. new
+      .. (anchor and ("#" .. anchor) or "")
+      .. (alias and ("|" .. alias) or "")
+      .. "]]"
   end)
   return out, n
 end

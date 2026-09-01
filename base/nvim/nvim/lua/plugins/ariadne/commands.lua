@@ -1,5 +1,6 @@
 -- Miscellaneous commands for the Ariadne notes workflow
 local utils = require("plugins.ariadne.utils")
+local wikilinks = require("plugins.ariadne.wikilinks")
 
 local M = {}
 
@@ -55,35 +56,26 @@ end
 
 -- Rewrite [[old_name]] / [[old_name|alias]] links to new_name (case-insensitive).
 -- Returns true if the file was changed.
+-- Point every link to `old_name` at `new_name`, in one note on disk.
+--
+-- The grammar lives in wikilinks, not here: this used to compare the raw
+-- bracketed text, so `[[dir/note]]` and `[[note#heading]]` were left pointing at
+-- the renamed-away note -- and rename deletes the original, so those became dead
+-- links. Same class of bug the delete gate was built to avoid.
 local function rewrite_links(filepath, old_name, new_name)
-  local file = io.open(filepath, "r")
-  if not file then
+  local content = utils.read_note(filepath)
+  if not content then
     return false
   end
-  local content = file:read("*a")
-  file:close()
-
-  local new_content = content:gsub("%[%[([^%]|]+)%]%]", function(match)
-    if match:lower() == old_name:lower() then
-      return "[[" .. new_name .. "]]"
-    end
-    return "[[" .. match .. "]]"
-  end)
-  new_content = new_content:gsub("%[%[([^%]|]+)|", function(match)
-    if match:lower() == old_name:lower() then
-      return "[[" .. new_name .. "|"
-    end
-    return "[[" .. match .. "|"
-  end)
-
-  if new_content == content then
+  local rewritten, n = wikilinks.retarget(content, old_name, new_name)
+  if n == 0 or rewritten == content then
     return false
   end
   local out_file = io.open(filepath, "w")
   if not out_file then
     return false
   end
-  out_file:write(new_content)
+  out_file:write(rewritten)
   out_file:close()
   return true
 end
@@ -128,8 +120,9 @@ function M.rename(new_name)
   end
 
   -- Find all files that link to the old name (case-insensitive)
-  local search_term = "[[" .. old_name
-  local files_to_update = utils.grep_note_files(search_term, { ignorecase = true })
+  -- Bare name, not "[[name": the bracketed prefix never matches [[dir/name]],
+  -- so retarget would never see it. grep is a prefilter; retarget re-checks.
+  local files_to_update = utils.grep_note_files(old_name, { ignorecase = true })
   vim.notify("Found " .. #files_to_update .. " files with links", vim.log.levels.INFO)
 
   local updated_count = 0
@@ -190,8 +183,12 @@ function M.extract_note()
     return
   end
 
-  -- Check if note already exists
-  local new_file = utils.vault_path .. "/" .. note_name .. ".md"
+  -- Guarded join: the name came from a prompt, so it must not escape the vault.
+  local new_file = utils.vault_child(note_name)
+  if not new_file then
+    vim.notify("Name escapes the vault: " .. utils.sanitize(note_name), vim.log.levels.WARN)
+    return
+  end
   if vim.fn.filereadable(new_file) == 1 then
     vim.notify("Note already exists: " .. note_name, vim.log.levels.ERROR)
     return
@@ -227,11 +224,11 @@ function M.smart_follow_link()
         utils.edit(found)
         return
       end
-      -- Note doesn't exist - create it, but never outside the vault (a link
-      -- like [[../../etc/passwd]] must not escape via this concatenation).
-      local new_file = vim.fs.normalize(utils.vault_path .. "/" .. link .. ".md")
-      if not vim.startswith(new_file, utils.vault_path .. "/") then
-        vim.notify("Link escapes the vault: " .. link, vim.log.levels.WARN)
+      -- Note doesn't exist - create it, but never outside the vault: a link
+      -- like [[../../etc/passwd]] must not escape via this concatenation.
+      local new_file = utils.vault_child(link)
+      if not new_file then
+        vim.notify("Link escapes the vault: " .. utils.sanitize(link), vim.log.levels.WARN)
         return
       end
       utils.edit(new_file)

@@ -123,9 +123,10 @@ function M.formatexpr()
   local count = vim.v.count
 
   -- Guard: only act inside the vault on markdown files
-  local filepath = vim.api.nvim_buf_get_name(0)
-  local vault = utils.vault_path
-  if not filepath:match(vim.pesc(vault)) then
+  -- init.lua only decides whether to *install* formatexpr; this decides whether
+  -- it runs. Both must ask the same question, or a symlinked vault installs the
+  -- guard and then declines it, silently letting gw break a [[wiki link]].
+  if not utils.in_vault(vim.api.nvim_buf_get_name(0)) then
     return 1
   end
 

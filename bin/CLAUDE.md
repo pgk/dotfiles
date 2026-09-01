@@ -63,7 +63,17 @@ are flags (`--dup-min`, `--dup-title-min`) so they can be re-tuned here.
 
 The scan is every-pair with no index structure: 48s for 4.6M pairs at 3040 notes
 and 768 dims, measured against a real warm cache. A warm cache does not help —
-it saves the embedding round trip, not the comparison. That is why it is its own mode. If it ever needs to be faster,
+it saves the embedding round trip, not the comparison.
+
+That 48s holds **at the default `--dup-min`**, where almost nothing clears the
+cosine gate so the title is almost never computed. Lowering it pays
+`SequenceMatcher.ratio()` on far more pairs, at 13-32 us against the dot
+product's 9.4 us — `--dup-min 0` on a vault this size is minutes, not seconds.
+If that becomes a real invocation, the fix is `real_quick_ratio()` /
+`quick_ratio()` as a prefilter: both are documented upper bounds on `ratio()`,
+so a pair already destined for eviction settles without the exact ratio. Note
+`ratio()` is **not symmetric** — pin `seq2` to the inner-loop name or the
+verdict changes. That is why it is its own mode. If it ever needs to be faster,
 the honest fix is a blocking key on the title, not an approximate vector index —
 the title is the cheap signal and it is already required.
 
