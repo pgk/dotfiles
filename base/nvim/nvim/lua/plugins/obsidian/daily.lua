@@ -1,7 +1,110 @@
 -- Daily notes for Obsidian integration
 local utils = require("plugins.obsidian.utils")
+local anniversary = require("plugins.obsidian.anniversary")
 
 local M = {}
+
+math.randomseed((vim.uv or vim.loop).hrtime())
+
+local ON_THIS_DAY_LIMIT = 5
+local NEGLECTED_WINDOW = "180d"
+local NEGLECTED_SAMPLE = 3
+-- Sampled from a pool rather than taken in rank order: the ranking is stable
+-- between runs, so the same top rows would appear every morning until the notes
+-- were edited -- and opening one without editing it does not move its mtime.
+local NEGLECTED_POOL = 50
+
+local function pick_sample(pool, count)
+  local picked, taken = {}, {}
+  while #picked < count and #picked < #pool do
+    local idx = math.random(#pool)
+    if not taken[idx] then
+      taken[idx] = true
+      table.insert(picked, pool[idx])
+    end
+  end
+  return picked
+end
+
+local function on_this_day_lines(today_str)
+  local vault = utils.vault_path
+  local entries = anniversary.entries_for(utils.list_note_files(), vault)
+  local hits = anniversary.on_this_day(entries, today_str)
+  if #hits == 0 then
+    return {}
+  end
+  local lines = { "## On this day", "" }
+  for i, hit in ipairs(hits) do
+    if i > ON_THIS_DAY_LIMIT then
+      break
+    end
+    local years = hit.years_ago == 1 and "1 year ago" or (hit.years_ago .. " years ago")
+    table.insert(lines, string.format("- %s (%s)", utils.as_wikilink(hit.name), years))
+  end
+  if #hits > ON_THIS_DAY_LIMIT then
+    table.insert(lines, string.format("- ...and %d older", #hits - ON_THIS_DAY_LIMIT))
+  end
+  table.insert(lines, "")
+  return lines
+end
+
+local function neglected_pool()
+  if vim.fn.executable("notes-graph") == 0 then
+    vim.notify("notes-graph not found on PATH; skipping the neglected section", vim.log.levels.WARN)
+    return nil
+  end
+  local argv = {
+    "notes-graph", utils.vault_path,
+    "--neglected", NEGLECTED_WINDOW,
+    "--limit", tostring(NEGLECTED_POOL),
+    "--json",
+  }
+  local result = vim.system(argv, { text = true }):wait(30000)
+  local output = result.stdout or ""
+  if result.stderr and result.stderr ~= "" then
+    vim.notify("notes-graph: " .. utils.sanitize(result.stderr), vim.log.levels.WARN)
+  end
+  local ok, decoded = pcall(vim.json.decode, output)
+  if result.code ~= 0 or not ok or type(decoded) ~= "table" or type(decoded.neglected) ~= "table" then
+    local detail = output == "" and "(no output)" or output:sub(1, 200)
+    vim.notify(
+      "notes-graph --neglected failed, skipping that section: " .. utils.sanitize(detail),
+      vim.log.levels.WARN
+    )
+    return nil
+  end
+  -- Shape-check every row. An unexpected type would otherwise throw out of
+  -- M.open, and the daily note would not be written at all.
+  local pool = {}
+  for _, entry in ipairs(decoded.neglected) do
+    if type(entry) == "table" and type(entry.name) == "string" and type(entry.degree) == "number" then
+      table.insert(pool, entry)
+    end
+  end
+  return pool
+end
+
+local function neglected_lines()
+  local pool = neglected_pool()
+  if not pool or #pool == 0 then
+    return {}
+  end
+  local picked = pick_sample(pool, NEGLECTED_SAMPLE)
+  table.sort(picked, function(a, b)
+    return a.degree > b.degree
+  end)
+  local lines = { "## Neglected", "" }
+  for _, entry in ipairs(picked) do
+    local degree = entry.degree
+    table.insert(lines, string.format(
+      "- %s - %d %s, untouched %s",
+      utils.as_wikilink(entry.name), degree, degree == 1 and "link" or "links",
+      type(entry.age) == "string" and utils.sanitize(entry.age) or "?"
+    ))
+  end
+  table.insert(lines, "")
+  return lines
+end
 
 local function find_previous_daily_note(today_str)
   -- Find all daily notes (YYYY-MM-DD.md pattern)
@@ -31,7 +134,6 @@ local function get_random_review_notes(today_str, count)
     count = #files
   end
 
-  math.randomseed(os.time())
   local selected = {}
   local indices = {}
   while #selected < count and #selected < #files do
@@ -74,6 +176,9 @@ function M.open(offset)
     end
     table.insert(lines, "")
 
+    vim.list_extend(lines, on_this_day_lines(today_str))
+    vim.list_extend(lines, neglected_lines())
+
     -- Write file
     local file = io.open(daily_file, "w")
     if file then
@@ -82,7 +187,7 @@ function M.open(offset)
     end
   end
 
-  vim.cmd("edit " .. vim.fn.fnameescape(daily_file))
+  utils.edit(daily_file)
 end
 
 function M.add_review()
@@ -120,7 +225,6 @@ function M.add_review()
   end
 
   -- Pick 5 random unique notes
-  math.randomseed(os.time())
   local selected = {}
   local indices = {}
   while #selected < 5 do

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Report vault structure: orphan and sparse notes, hubless clusters, or recent activity."""
+"""Report vault structure: orphan and sparse notes, hubless clusters, recent activity, or neglect."""
 
 import argparse
 import json
@@ -11,6 +11,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import notes_cluster
 import notes_common
+import notes_neglected
 
 
 def note_entry(path, graph):
@@ -42,37 +43,24 @@ def classify(graph, min_links):
 DURATION_UNITS = {"h": 3600, "d": 86400, "w": 604800}
 
 
-def parse_duration(text):
-    """A --since value like 7d, 36h or 2w, as seconds."""
+def parse_duration(text, flag="--since"):
+    """A duration like 7d, 36h or 2w, as seconds."""
     raw = str(text).strip().lower()
     shown = notes_common.printable(text)
     if not raw or raw[-1] not in DURATION_UNITS:
-        raise ValueError(f"--since needs a duration like 7d, 36h or 2w, got '{shown}'")
+        raise ValueError(f"{flag} needs a duration like 7d, 36h or 2w, got '{shown}'")
     try:
         amount = float(raw[:-1])
     except ValueError:
-        raise ValueError(f"--since needs a number before '{raw[-1]}', got '{shown}'")
+        raise ValueError(f"{flag} needs a number before '{raw[-1]}', got '{shown}'")
     if amount <= 0:
-        raise ValueError(f"--since must be positive, got '{shown}'")
+        raise ValueError(f"{flag} must be positive, got '{shown}'")
     return amount * DURATION_UNITS[raw[-1]]
 
 
 def touched_since(files, cutoff):
-    """{path: mtime} for notes modified since cutoff — one stat per note."""
-    recent = {}
-    for path in files:
-        try:
-            mtime = os.path.getmtime(path)
-        except OSError as exc:
-            print(
-                f"warning: cannot stat {notes_common.printable(path)}: "
-                f"{notes_common.printable(exc)}",
-                file=sys.stderr,
-            )
-            continue
-        if mtime >= cutoff:
-            recent[path] = mtime
-    return recent
+    """{path: mtime} for notes modified since cutoff."""
+    return {p: m for p, m in notes_common.note_mtimes(files).items() if m >= cutoff}
 
 
 def describe_age(seconds):
@@ -244,6 +232,26 @@ def format_json(orphans, sparse, min_links, total, vault, hubless=(), shape=None
     )
 
 
+def run_activity(args, files, graph, labels, shape, vault, window):
+    now = time.time()
+    recent = touched_since(files, now - window)
+    clusters, orphaned = activity(graph, labels, recent, vault, now)
+    report = format_activity_json if args.json else format_activity
+    print(report(clusters, orphaned, args.since, len(recent), len(files), vault, shape))
+    return 0
+
+
+def run_neglected(args, files, graph, vault, neglect):
+    now = time.time()
+    stale = notes_neglected.untouched_before(files, now - neglect)
+    entries, considered = notes_neglected.select(
+        graph, stale, args.min_links, args.limit, vault, now
+    )
+    report = notes_neglected.format_json if args.json else notes_neglected.format_text
+    print(report(entries, considered, args.neglected, len(files), vault))
+    return 0
+
+
 def parse_args(argv):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -266,6 +274,19 @@ def parse_args(argv):
         help="Report recent activity instead of health: notes touched in the last "
         "7d / 36h / 2w, grouped by cluster",
     )
+    parser.add_argument(
+        "--neglected",
+        metavar="DURATION",
+        default=None,
+        help="Report well-connected notes untouched for at least 180d / 52w / 8760h, "
+        "best connected first; 'well connected' means at least --min-links connections",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=20,
+        help="Rows to show in the --neglected report; 0 for all (default: 20)",
+    )
     parser.add_argument("--json", action="store_true", help="Emit JSON instead of a text report")
     parser.add_argument(
         "--exclude",
@@ -282,7 +303,14 @@ def main(argv=None):
     try:
         if not 0 < args.hub_reach <= 1:
             raise ValueError(f"--hub-reach must be above 0 and at most 1, got {args.hub_reach}")
-        window = parse_duration(args.since) if args.since else None
+        if args.limit < 0:
+            raise ValueError(f"--limit cannot be negative, got {args.limit}")
+        if args.since is not None and args.neglected is not None:
+            raise ValueError("--since and --neglected are opposite reports; pass one")
+        window = parse_duration(args.since) if args.since is not None else None
+        neglect = (
+            parse_duration(args.neglected, "--neglected") if args.neglected is not None else None
+        )
         vault_spec = notes_common.require_vault(args.vault)
     except ValueError as exc:
         print(f"notes-graph: {exc}", file=sys.stderr)
@@ -296,6 +324,10 @@ def main(argv=None):
     files = list(notes_common.iter_markdown_files(vault, args.exclude or []))
     name_index = notes_common.build_name_index(files)
     graph = notes_cluster.build_graph(files, name_index)
+
+    if neglect is not None:
+        return run_neglected(args, files, graph, vault, neglect)
+
     orphans, sparse = classify(graph, args.min_links)
 
     neighbors = notes_cluster.adjacency(graph)
@@ -303,12 +335,7 @@ def main(argv=None):
     shape = notes_cluster.shape(neighbors, labels)
 
     if window is not None:
-        now = time.time()
-        recent = touched_since(files, now - window)
-        clusters, orphaned = activity(graph, labels, recent, vault, now)
-        report = format_activity_json if args.json else format_activity
-        print(report(clusters, orphaned, args.since, len(recent), len(files), vault, shape))
-        return 0
+        return run_activity(args, files, graph, labels, shape, vault, window)
 
     hubless = hubless_clusters(neighbors, labels, args.hub_reach, vault)
 

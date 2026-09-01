@@ -26,6 +26,20 @@ function M.sanitize(s)
   return (s:gsub("\239\187\191", "<U+FEFF>"))
 end
 
+-- Render an untrusted note name as a wikilink for writing into a note file.
+-- sanitize() escapes control characters, so a name carrying a newline cannot
+-- become a line of its own -- which matters because nvim reads a modeline from
+-- the last five lines of a file it opens. A name containing a bracket gets no
+-- link syntax at all: "]]" would close the wikilink early, forging a link to a
+-- note the writer never referenced.
+function M.as_wikilink(name)
+  local safe = M.sanitize(name)
+  if safe:find("[%[%]]") then
+    return safe
+  end
+  return "[[" .. safe .. "]]"
+end
+
 -- `vim.cmd("edit " .. fnameescape(path))` is not safe for a path that came from
 -- the filesystem: fnameescape does not escape a newline, and nvim_exec2 splits on
 -- it first, so anything after it runs as an Ex command. The structured form takes

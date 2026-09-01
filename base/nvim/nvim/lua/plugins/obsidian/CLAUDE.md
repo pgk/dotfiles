@@ -33,7 +33,8 @@ is a hard rule, not a judgment call.
 
 ## `--since` and modification times
 
-`activity.lua` / `notes-graph --since` treat mtime as "the user edited this". That
+`activity.lua` / `notes-graph --since`, `notes-graph --neglected`, and the daily
+note's "on this day" fallback all treat mtime as "the user edited this". That
 held when it was checked (29 of 3,037 notes in a week), but it is an assumption about
 the user's sync setup, not a property of the code. If it ever stops holding, the
 window fills with untouched notes and the feature is worthless — re-measure before
@@ -51,6 +52,10 @@ nvim --headless \
   -c "set rtp+=$PWD/base/nvim/nvim" \
   -c "PlenaryBustedFile base/nvim/nvim/lua/plugins/obsidian/utils_spec.lua"
 ```
+
+`anniversary_spec.lua` covers the "on this day" date logic behind the daily-note
+section. Both its functions are pure, so it needs no vault — run it the same way,
+swapping the filename.
 
 The picker row builders (`describe`, `describe_cluster`, `header_for`) are still
 module-local and untested; export them if you need to pin their behaviour.

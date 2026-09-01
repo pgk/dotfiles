@@ -1,9 +1,10 @@
 # bin/ — notes vault tools
 
-`notes-graph`, `notes-deadlinks` and `notes-similar` all read a whole notes
-vault. **None of them has a `~/notes` default**: every invocation must name the
-vault, as an argument or via `$NOTES_VAULT`, and the check runs before the vault
-is walked so a bad invocation costs nothing. The guard is
+`notes-graph` (including its `--since` and `--neglected` reports),
+`notes-deadlinks` and `notes-similar` all read a whole notes vault. **None of
+them has a `~/notes` default**: every invocation must name the vault, as an
+argument or via `$NOTES_VAULT`, and the check runs before the vault is walked so
+a bad invocation costs nothing. The guard is
 `notes_common.require_vault()` — keep it, and don't reintroduce a default in any
 sibling tool.
 

@@ -86,6 +86,20 @@ def iter_markdown_files(vault, excludes):
             print(f"warning: --exclude {printable(pattern)} matched nothing", file=sys.stderr)
 
 
+def note_mtimes(files):
+    """{path: mtime}, warning once per note that cannot be stat'd."""
+    mtimes = {}
+    for path in files:
+        try:
+            mtimes[path] = os.path.getmtime(path)
+        except OSError as exc:
+            print(
+                f"warning: cannot stat {printable(path)}: {printable(exc)}",
+                file=sys.stderr,
+            )
+    return mtimes
+
+
 def build_name_index(files):
     index = {}
     for path in files:

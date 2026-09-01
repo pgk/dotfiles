@@ -7,6 +7,30 @@
 -- they are the pieces worth pinning.
 local utils = require("plugins.obsidian.utils")
 
+describe("utils.as_wikilink", function()
+  it("wraps an ordinary note name", function()
+    assert.equals("[[hubless-eight]]", utils.as_wikilink("hubless-eight"))
+  end)
+
+  it("cannot be made to write a second line", function()
+    -- A newline in a filename survives notes-graph's JSON and would otherwise
+    -- land as its own line in the daily note, within the five lines nvim reads
+    -- a modeline from -- in a file it opens immediately afterwards.
+    local out = utils.as_wikilink("hub\nvim: set foldmethod=expr:")
+    assert.is_nil(out:find("\n"))
+    assert.equals("[[hub<0A>vim: set foldmethod=expr:]]", out)
+  end)
+
+  it("refuses link syntax to a name that could close the link early", function()
+    assert.equals("a]] and [[b", utils.as_wikilink("a]] and [[b"))
+    assert.equals("open[bracket", utils.as_wikilink("open[bracket"))
+  end)
+
+  it("handles nil without throwing", function()
+    assert.equals("[[]]", utils.as_wikilink(nil))
+  end)
+end)
+
 describe("utils.sanitize", function()
   it("leaves an ordinary note name untouched", function()
     assert.equals("hubless-eight", utils.sanitize("hubless-eight"))

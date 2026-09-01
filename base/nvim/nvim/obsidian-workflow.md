@@ -78,11 +78,10 @@ The panel updates automatically when you switch buffers. Navigate to a link and 
 New daily notes are automatically created with a template:
 
 ```markdown
-# 2025-01-15
+Daily note for 2026-09-01
 
-Previous: [[2025-01-13]]
+Previous #daily-note was: [[2025-08-30]]
 
-## Review
 
 - [[random-note-1]]
 - [[random-note-2]]
@@ -90,14 +89,29 @@ Previous: [[2025-01-13]]
 - [[random-note-4]]
 - [[random-note-5]]
 
-## Notes
+## On this day
 
+- [[2025-09-01]] (1 year ago)
+- [[0020240901-7]] (2 years ago)
+
+## Neglected
+
+- [[harbour-metaphor]] - 12 links, untouched 14 months
+- [[gardening-as-editing]] - 9 links, untouched 11 months
 ```
 
-Features:
-- Links to the **previous daily note** (not yesterday, but the last existing entry)
-- 5 random notes for review
-- Ready-to-use structure
+Three ways in, each answering a different question:
+
+- **5 random notes** — pure serendipity, no criteria.
+- **On this day** — notes dated today in an earlier year. The date comes from the
+  filename (`YYYY-MM-DD`, `YYYY-MM-DD-title`, `YYYYMMDD-title`, or the
+  `00YYYYMMDD-N` names the old `mknote` wrote) and otherwise from the file's
+  mtime. Birthtime is deliberately not used — whether sync preserves it has never
+  been measured. Absent on a day with no anniversaries.
+- **Neglected** — well-connected notes you have not touched in 180 days, from
+  `notes-graph --neglected`. Three are sampled from the 50 best connected rather
+  than taken in rank order, so the same notes do not reappear every morning.
+  Absent if `notes-graph` is not on `PATH` (you get a warning instead).
 
 Workflow:
 1. `<leader>od` - Open/create today's note

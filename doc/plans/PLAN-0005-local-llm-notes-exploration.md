@@ -25,10 +25,16 @@ argument or via `$NOTES_VAULT` (`notes_common.require_vault`).
 | `notes-graph --since 7d` | `:ObsidianActive [window]` `<leader>oa` | **What have I been working on**, grouped by cluster |
 | `notes-deadlinks` | `:ObsidianDeadLinks` `<leader>oD` | Dead wikilinks, with fuzzy candidates |
 | `notes-similar` | `:ObsidianSimilar` `<leader>oS` | Semantically similar but unlinked notes, **bridging pairs first** |
+| `notes-graph --neglected 180d` | daily note "Neglected" section | **Well-connected notes gone cold** — the inverse of the activity view |
+
+The daily note (`:ObsidianDaily`) also opens with an **On this day** section:
+notes dated today in an earlier year, by filename date where there is one and by
+mtime otherwise.
 
 Shared modules: `notes_common.py` (walking, links, the vault guard, `--exclude`),
 `notes_cluster.py` (graph construction, deterministic Louvain, coverage),
-`notes_embed_cache.py` / `notes_embed_client.py`, `notes_similar_report.py`.
+`notes_neglected.py`, `notes_embed_cache.py` / `notes_embed_client.py`,
+`notes_similar_report.py`.
 Lua lives in `base/nvim/nvim/lua/plugins/obsidian/`.
 
 Only `notes-similar` touches the network, and only a loopback embedding endpoint
@@ -55,7 +61,22 @@ Each has its reasoning in the archive below; the one-line why is here.
   (`--since`, `--exclude`). Scoping the graph would make a note linked from fifty
   older notes look like an orphan. Tested.
 - **`--since` switches the report** rather than adding a section: twelve active
-  notes would be buried under a thousand sparse rows.
+  notes would be buried under a thousand sparse rows. `--neglected` switches it
+  the same way, and the two refuse to run together — opposite readings of the
+  same field, so letting one silently win would answer the wrong question.
+- **`--neglected` does not run Louvain and prints no graph shape.** Every
+  cluster-derived view prints the shape as its own caveat; this one ranks on
+  degree and mtime alone, so there is nothing to caveat and no reason to spend
+  the seconds. Its caveat is the mtime assumption instead, and it prints that.
+- **Neglect ranks on degree first, age second.** The filter has already
+  established that every candidate is cold; degree is what separates a note
+  worth returning to from an abandoned stub.
+- **The daily note samples the neglected pool rather than taking the top rows.**
+  The ranking is stable between runs, and opening a note without editing it does
+  not move its mtime, so a fixed top-3 would repeat every morning indefinitely.
+- **"On this day" never reads birthtime.** Whether the sync preserves it has
+  never been measured, and the rule that produced the `--since` measurement
+  applies here too. Filename dates are exact; mtime is the documented fallback.
 
 ## Hard rules
 
@@ -84,7 +105,8 @@ cd ~/dotfiles/bin
 for f in *_test.py; do printf "%-34s " "$f"; python3 "$f" 2>&1 | tail -1; done
 ```
 
-Expect **304 tests across 11 suites, all OK** (25/25/46/33/29/29/33/21/20/17/26).
+Expect **325 tests across 12 suites, all OK**
+(25/25/46/33/29/29/21/33/21/20/17/26).
 
 ```sh
 cd ~/dotfiles && nvim --headless \
@@ -93,12 +115,13 @@ cd ~/dotfiles && nvim --headless \
   -c "PlenaryBustedFile base/nvim/nvim/lua/plugins/obsidian/utils_spec.lua"
 ```
 
-Expect **8 successes, 0 failures**. Smoke test against the fixture, never `~/notes`:
+Expect **12 successes, 0 failures**, and **18** for `anniversary_spec.lua`. Smoke test against the fixture, never `~/notes`:
 
 ```sh
 V="$PWD/base/nvim/nvim/lua/plugins/obsidian/dev-vault"
-python3 bin/notes-graph "$V"              # 1 hubless cluster, modularity 0.634
-python3 bin/notes-graph "$V" --since 1h   # after `touch`ing a fixture note
+python3 bin/notes-graph "$V"                   # 1 hubless cluster, modularity 0.634
+python3 bin/notes-graph "$V" --since 1h        # after `touch`ing a fixture note
+python3 bin/notes-graph "$V" --neglected 180d  # after back-dating one with os.utime
 ```
 
 There is no Makefile target, no linter and no type checker configured — the
@@ -110,6 +133,24 @@ suites above are the whole gate.
 mutation-tested): all four tools, the clustering module, the activity view, the
 `--exclude` fix, non-finite embedding rejection, the Lua safety helpers and their
 specs, and the obsidian.nvim 4.0 deprecation cleanup.
+
+**Added and reviewed 2026-09-01:** `notes-graph --neglected` with
+`notes_neglected.py`, `anniversary.lua` plus its spec, and the two new daily-note
+sections in `daily.lua`. `/done` was run: both reviewers reported, every finding
+was verified before being acted on, and the three false greens were re-confirmed
+by mutation after fixing. What the round caught, worth not reintroducing:
+
+- A newline in a note filename survived `--neglected`'s JSON into the daily note
+  as a line of its own — inside the five lines nvim reads a **modeline** from, in
+  a file it opens immediately after writing. `utils.as_wikilink` now escapes
+  control characters and withholds link syntax from a name containing a bracket.
+- `on_this_day` fell back to mtime even when the filename carried a date that
+  did not match, rendering rows whose own name contradicted the date beside them.
+  The source is now chosen once, then tested.
+- Three tests passed while the behaviour they named was broken: `--limit` and
+  `--min-links` were never driven through the CLI (a helper reimplemented it),
+  and the "inclusive boundary" test sampled `time.time()` twice so equality never
+  occurred. All three now fail under the mutation that motivated them.
 
 **Not done:** nothing is in progress. `master` is **many commits ahead of
 `origin/master` and unpushed** (check with `git rev-list --count
