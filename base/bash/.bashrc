@@ -222,11 +222,6 @@ if [ -f ~/dotfiles/base/bash/.profile ]; then
   . ~/dotfiles/base/bash/.profile
 fi
 
-if [ -d "$HOME/dotfiles/base/phpdev/bin" ]; then
-  # phpdev preecedence over system bin.
-  export PATH="$HOME/dotfiles/base/phpdev/bin:$PATH"
-fi
-
 # for dir in "$HOME"/dotfiles/plugins/*/; do
 #     if [ -d "$dir/bin" ]; then
 #       export PATH="$PATH:$dir/bin"
@@ -234,11 +229,8 @@ fi
 # done
 
 if [ -d "$HOME/dotfiles/plugins/dotfiles-priv/bin" ]; then
-  # phpdev preecedence over system bin.
   export PATH="$HOME/dotfiles/plugins/dotfiles-priv/bin:$PATH"
 fi
-# export PATH="/usr/local/opt/php@7.4/bin:$PATH"
-# export PATH="/usr/local/opt/php@7.4/sbin:$PATH"
 
 if [ -d "$HOME/public_html/bin" ]; then
   # custom server bin precedence over system bin.
@@ -267,12 +259,6 @@ export NVM_DIR="$HOME/.nvm"
 # [ -d "$HOME/dev/vagrant-docker-engine" ] && {
 #   export DOCKER_HOST=tcp://docker.local:2375
 # }
-
-if [ -d "$HOME/.phpenv/bin" ]; then
-  # add phpdev
-  export PATH="$HOME/.phpenv/bin:$PATH"
-  eval "$(phpenv init -)"
-fi
 
 if [ -d "$HOME/.local/bin" ]; then
   export PATH="$HOME/.local/bin:$PATH"

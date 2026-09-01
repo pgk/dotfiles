@@ -52,9 +52,6 @@ local on_attach = function(client, bufnr)
   if client.name == 'tsserver' then
     client.server_capabilities.document_formatting = false
   end
-  if client.name == 'intelephense' then
-    client.server_capabilities.document_formatting = false
-  end
 
   if client.name == 'gopls' and client.server_capabilities.document_formatting then
     vim.api.nvim_command [[augroup Format]]
@@ -150,110 +147,13 @@ end
 --require'lspconfig'.vimls.setup{
 --on_attach = on_attach
 --}
-if vim.fn['executable']('phpctor') then
--- nvim_lsp.phpactor.setup{
---   on_attach = on_attach,
---   filetypes = { "php" },
---   root_dir = root_pat({ "composer.json", ".git", "wp-content", "vendor" }),
---   capabilities = capabilities,
--- }
-end
-
-if vim.fn['executable']('intelephense') > 0 then
-nvim_lsp.intelephense.setup({
-    root_dir = root_pat({ "composer.json", ".git", "wp-content", "vendor" }), filetypes = { "php" },
-    settings = {
-        init_options = {
-            format = {
-                enable = false;
-            },
-        },
-        intelephense = {
-            telemetry = {
-              enabled = false,
-            },
-            stubs = { 
-                "bcmath",
-                "bz2",
-                "calendar",
-                "Core",
-                "curl",
-                "date",
-                "dba",
-                "dom",
-                "enchant",
-                "fileinfo",
-                "filter",
-                "ftp",
-                "gd",
-                "gettext",
-                "hash",
-                "iconv",
-                "imap",
-                "intl",
-                "json",
-                "ldap",
-                "libxml",
-                "mbstring",
-                "mcrypt",
-                "mysql",
-                "mysqli",
-                "password",
-                "pcntl",
-                "pcre",
-                "PDO",
-                "pdo_mysql",
-                "Phar",
-                "readline",
-                "recode",
-                "Reflection",
-                "regex",
-                "session",
-               "SimpleXML",
-                "soap",
-                "sockets",
-                "sodium",
-                "SPL",
-                "standard",
-                "superglobals",
-                "sysvsem",
-                "sysvshm",
-                "tokenizer",
-                "xml",
-                "xdebug",
-                "xmlreader",
-                "xmlwriter",
-                "yaml",
-                "zip",
-                "zlib",
-                "wordpress",
-                "woocommerce",
-                "acf-pro",
-                "wordpress-globals",
-                "wp-cli",
-                "genesis",
-                "polylang"
-            },
-            format = {
-                enable = false;
-            },
-            files = {
-                maxSize = 5000000;
-            };
-        };
-    },
-    capabilities = capabilities,
-    on_attach = on_attach
-});
-end
-
 if vim.fn['executable']('diagnosticls') then
 nvim_lsp.diagnosticls.setup{
   cmd = { 'diagnostic-languageserver', '--stdio', '--log-level', '2' },
   on_attach = on_attach,
-  root_dir = root_pat({ "composer.json", ".git", "wp-content", "vendor" }),
+  root_dir = root_pat({ ".git" }),
   single_file_support = true,
-  filetypes = { 'php', 'javascript', 'javascriptreact', 'json', 'typescript',
+  filetypes = { 'javascript', 'javascriptreact', 'json', 'typescript',
                 'typescriptreact', 'css', 'less', 'scss', 'markdown', 'pandoc',
                 'sh'},
   init_options = {
@@ -299,25 +199,9 @@ nvim_lsp.diagnosticls.setup{
           [1] = 'warning'
         }
       },
-      phpcs_wp = {
-        command = 'phpcs-wp',
-        sourceName = 'phpcs-wp',
-        debounce = 100,
-        args = { '--report=emacs', '-s', '%filepath' },
-        offsetLine = 0,
-        offsetColumn = 0,
-        formatLines = 1,
-        formatPattern = {
-          [[^.*:(\d+):(\d+):\s+(.*)\s+-\s+(.*)(\r|\n)*$]],
-          { line = 1, column = 2, security = 3, message = { '[phpcs] ', 4 } },
-        },
-        securities = { error = 'error', warning = 'warning' },
-        rootPatterns = { 'wp-content' },
-      },
     },
     filetypes = {
       javascript = 'eslint',
-      php = 'phpcs_wp',
       javascriptreact = 'eslint',
       typescript = 'eslint',
       typescriptreact = 'eslint',
@@ -329,12 +213,6 @@ nvim_lsp.diagnosticls.setup{
         rootPatterns = { '.git' },
         args = { '--stdin', '--stdin-filename', '%filename', '--fix-to-stdout' },
         rootPatterns = { '.git' },
-      },
-      phpcbf_wp = {
-        command = 'phpcbf-wp',
-        debounce = 100,
-        args = { '--report=emacs', '-s', '%filepath' },
-        rootPatterns = { 'wp-content' },
       },
       prettier = {
         command = 'prettier_d_slim',
@@ -354,7 +232,6 @@ nvim_lsp.diagnosticls.setup{
       typescriptreact = 'prettier',
       json = 'prettier',
       markdown = 'prettier',
-      php = 'phpcbf_wp',
     }
   }
 }

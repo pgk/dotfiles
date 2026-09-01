@@ -1,10 +1,6 @@
 plugins/*
 !plugins/.gitkeep
 
-base/phpdev/vendor
-base/phpdev/wpcs
-base/phpdev/phpactor
-
 base/alacritty/themes/current.yml
 
 .secrets
