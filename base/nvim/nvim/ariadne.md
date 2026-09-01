@@ -328,9 +328,11 @@ Both thresholds are borrowed calibration from another vault, not a measurement
 of this one. Re-tune them on the CLI: `ariadne-similar --duplicates ~/notes
 --dup-min 0.85 --dup-title-min 0.9`.
 
-The scan compares every pair of notes with no index structure — roughly forty
-seconds at three thousand notes — which is why it is its own command and not
-something `:AriadneSimilar` pays for on every query. It runs async.
+The scan compares every pair of notes with no index structure — about 48 seconds
+at three thousand notes — which is why it is its own command and not something
+`:AriadneSimilar` pays for on every query. An up-to-date index does not make it
+quicker; it saves the embedding round trip, not the 4.6M comparisons. It runs
+async, so the editor stays usable while it works.
 
 ## Quick Capture Workflow
 

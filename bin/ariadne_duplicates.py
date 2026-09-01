@@ -36,9 +36,9 @@ def title_similarity(a, b):
 def find_duplicates(notes, cached, *, embed_min=EMBED_MIN, title_min=TITLE_MIN, limit=None):
     """Split the over-`embed_min` pairs into confirmed duplicates and the noisy band.
 
-    Quadratic with no index structure — about forty seconds at three thousand
-    notes with a 768-dim model — which is why this is its own mode and not
-    something a query pays for. Notes with no cached embedding are skipped rather
+    Quadratic with no index structure: 48s for 4.6M pairs at 3040 notes and 768
+    dims, measured against a real cache — which is why this is its own mode and
+    not something a query pays for. Notes with no cached embedding are skipped rather
     than embedded; the caller decides whether to refresh first.
 
     Both output lists are bounded while scanning, not afterwards: at `embed_min`

@@ -77,7 +77,8 @@ borrowed calibration from another vault, so treat a bad hit rate as a reason to
 re-tune `--dup-min` / `--dup-title-min`, not as a bug.
 
 The picker is async for a second reason beyond the embedding round trip:
-the scan itself is every-pair, about forty seconds at three thousand notes.
+the scan itself is every-pair, 48s at 3040 notes — and a warm cache does not
+shorten it.
 Don't fold it into `similar.lua`, and don't make a query pay for it.
 
 ## Lua tests

@@ -61,8 +61,9 @@ job the default query already does.
 Both numbers are borrowed calibration, not a measurement of this vault; they
 are flags (`--dup-min`, `--dup-title-min`) so they can be re-tuned here.
 
-The scan is every-pair with no index structure: measured at 9.4 us/pair for the
-768-dim default model, so roughly forty seconds at three thousand notes. That is why it is its own mode. If it ever needs to be faster,
+The scan is every-pair with no index structure: 48s for 4.6M pairs at 3040 notes
+and 768 dims, measured against a real warm cache. A warm cache does not help —
+it saves the embedding round trip, not the comparison. That is why it is its own mode. If it ever needs to be faster,
 the honest fix is a blocking key on the title, not an approximate vector index —
 the title is the cheap signal and it is already required.
 

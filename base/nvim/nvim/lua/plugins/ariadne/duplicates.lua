@@ -153,7 +153,7 @@ function M.find_duplicates(limit)
 
   -- Async, and not only for the embedding round trip this shares with
   -- :AriadneSimilar: the scan itself compares every pair of notes, which is
-  -- about forty seconds at three thousand notes.
+  -- 48s at 3040 notes, and a warm cache does not shorten it.
   vim.notify("Scanning " .. vault .. " for duplicates...", vim.log.levels.INFO)
   vim.system(argv, { text = true }, function(result)
     vim.schedule(function()
