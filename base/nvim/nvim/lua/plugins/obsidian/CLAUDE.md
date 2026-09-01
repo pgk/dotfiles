@@ -74,9 +74,19 @@ nvim --headless \
 section — `date_from_name` and `on_this_day` are pure, `entries_for` gets a
 tempdir. Run it the same way, swapping the filename.
 
-`utils_spec.lua` also covers `as_wikilink`, `sample` and `run_notes_tool`; the
-last builds a fake tool on `$PATH` and asserts the argv order every caller
-depends on.
+`utils_spec.lua` also covers `as_wikilink`, `sample`, `write` and
+`run_notes_tool`; the last builds a fake tool on `$PATH` and asserts the argv
+order every caller depends on.
+
+## Opening and writing paths
+
+`vim.cmd("edit " .. fnameescape(path))` is banned here — `fnameescape` does not
+escape a newline and `nvim_exec2` splits on one first, so the rest of a crafted
+filename runs as an Ex command. Use `utils.edit(path)` and `utils.write(path)`,
+which pass the path as an argument. `utils.write` returns false rather than
+writing when the path is unusable, because `commands.rename` deletes the
+original on the very next line. There is no `fnameescape` left in `lua/`; keep it
+that way.
 
 The picker row builders (`describe`, `describe_cluster`, `header_for`) are still
 module-local and untested; export them if you need to pin their behaviour.

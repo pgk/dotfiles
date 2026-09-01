@@ -127,9 +127,9 @@ local function open_link_under_cursor()
   if found then
     -- Focus previous window and open file
     vim.cmd("wincmd p")
-    vim.cmd("edit " .. vim.fn.fnameescape(found))
+    utils.edit(found)
   else
-    vim.notify("Note not found: " .. link, vim.log.levels.WARN)
+    vim.notify("Note not found: " .. utils.sanitize(link), vim.log.levels.WARN)
   end
 end
 

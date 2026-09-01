@@ -149,6 +149,38 @@ describe("utils.sanitize", function()
   end)
 end)
 
+describe("utils.write", function()
+  local notified
+
+  before_each(function()
+    notified = {}
+    ---@diagnostic disable-next-line: duplicate-set-field
+    vim.notify = function(msg)
+      table.insert(notified, msg)
+    end
+    vim.cmd("enew!")
+  end)
+
+  it("writes to a path whose name contains a newline without running it", function()
+    local dir = vim.fn.tempname()
+    vim.fn.mkdir(dir, "p")
+    local path = dir .. "/a\nNoSuchCmdHere.md"
+    vim.api.nvim_buf_set_lines(0, 0, -1, false, { "body" })
+    assert.is_true(utils.write(path))
+    assert.equals("body", vim.fn.readfile(path)[1])
+    assert.equals(0, #notified)
+  end)
+
+  it("reports failure rather than writing, so a caller can stop before deleting", function()
+    -- M.rename deletes the original on the next line; a silent no-op here would
+    -- destroy the note.
+    assert.is_false(utils.write(nil))
+    assert.is_false(utils.write(""))
+    assert.is_false(utils.write(vim.NIL))
+    assert.equals(3, #notified)
+  end)
+end)
+
 describe("utils.edit", function()
   local notified
 

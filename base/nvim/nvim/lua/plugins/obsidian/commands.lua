@@ -128,10 +128,12 @@ function M.rename(new_name)
   update_frontmatter_id(old_name, new_name)
 
   -- Rename the file
-  vim.cmd("write " .. vim.fn.fnameescape(new_file))
+  if not utils.write(new_file) then
+    return
+  end
   vim.fn.delete(current_file)
   vim.bo.modified = false
-  vim.cmd("edit " .. vim.fn.fnameescape(new_file))
+  utils.edit(new_file)
   vim.cmd("bdelete! #")
 
   vim.notify("Renamed to " .. new_name .. ", updated " .. updated_count .. " files", vim.log.levels.INFO)
@@ -208,7 +210,7 @@ function M.smart_follow_link()
     if col >= start_pos and col <= end_pos - 1 then
       local found = utils.find_note_file(link)
       if found then
-        vim.cmd("edit " .. vim.fn.fnameescape(found))
+        utils.edit(found)
         return
       end
       -- Note doesn't exist - create it, but never outside the vault (a link
@@ -218,8 +220,8 @@ function M.smart_follow_link()
         vim.notify("Link escapes the vault: " .. link, vim.log.levels.WARN)
         return
       end
-      vim.cmd("edit " .. vim.fn.fnameescape(new_file))
-      vim.notify("Created: " .. link, vim.log.levels.INFO)
+      utils.edit(new_file)
+      vim.notify("Created: " .. utils.sanitize(link), vim.log.levels.INFO)
       return
     end
   end

@@ -116,6 +116,18 @@ function M.run_notes_tool(tool, extra_argv, required, opts)
   return decoded
 end
 
+-- Write the current buffer to `path`, with the same hazard and the same
+-- structured form as M.edit. Returns false without writing when the path is
+-- unusable, so a caller that deletes the original next can stop instead.
+function M.write(path)
+  if type(path) ~= "string" or path == "" then
+    vim.notify("Could not resolve the destination path", vim.log.levels.WARN)
+    return false
+  end
+  vim.cmd.write({ args = { path } })
+  return true
+end
+
 setmetatable(M, {
   __index = function(_, key)
     if key == "vault_path" then
