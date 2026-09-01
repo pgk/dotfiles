@@ -12,6 +12,7 @@ import sys
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ariadne_duplicates
@@ -213,14 +214,18 @@ class ReportTests(unittest.TestCase):
 
 class CliTests(unittest.TestCase):
     def run_cli(self, argv, files):
-        with tempfile.TemporaryDirectory() as root:
+        # `load_or_refresh` writes an embedding cache under $XDG_CACHE_HOME, so it
+        # has to be redirected or the suite litters the user's real ~/.cache with a
+        # dead directory per run — one per temp vault, never reused.
+        with tempfile.TemporaryDirectory() as root, tempfile.TemporaryDirectory() as cache:
             write_vault(root, files)
             args = ariadne_similar.parse_args([*argv, root])
             notes = ariadne_similar.scan_vault(root, [])
             out = io.StringIO()
-            with redirect_stdout(out), redirect_stderr(io.StringIO()):
-                cached = ariadne_similar.load_or_refresh(args, root, notes, fake_embedder())
-                code = ariadne_duplicates.run(args, root, notes, cached)
+            with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": cache}):
+                with redirect_stdout(out), redirect_stderr(io.StringIO()):
+                    cached = ariadne_similar.load_or_refresh(args, root, notes, fake_embedder())
+                    code = ariadne_duplicates.run(args, root, notes, cached)
             return code, out.getvalue()
 
     def test_the_text_mode_reports_the_duplicate(self):
