@@ -23,6 +23,7 @@ This document describes the custom Obsidian integration for Neovim, built on top
 | `<leader>ot` | `:ObsidianTransclusionToggle` | Toggle transclusion rendering |
 | `<leader>oR` | `:ObsidianRename` | Rename note and update all links |
 | `<leader>og` | `:ObsidianGraphHealth` | Find orphans, sparse notes, and clusters with no hub |
+| `<leader>oa` | `:ObsidianActive` | Notes touched recently, grouped by link community |
 | `<leader>oD` | `:ObsidianDeadLinks` | Find dead links and possible matches |
 | `<leader>oS` | `:ObsidianSimilar` | Find semantically similar but unlinked notes |
 
@@ -59,6 +60,7 @@ This document describes the custom Obsidian integration for Neovim, built on top
 | `:ObsidianRename [name]` | Rename current note and update all links |
 | `:ObsidianDaily [offset]` | Open daily note with template (offset: -1 = yesterday) |
 | `:ObsidianGraphHealth` | Find orphans, sparse notes, and clusters with no hub (picker) |
+| `:ObsidianActive [7d]` | Notes touched in a recent window, grouped by cluster (picker) |
 | `:ObsidianDeadLinks` | Find dead links and possible matches (picker) |
 | `:ObsidianSimilar` | Find semantically similar but unlinked notes (picker) |
 | `:ObsidianSimilarIndex[!]` | Refresh the embedding index in the background (`!` rebuilds from scratch) |
@@ -131,6 +133,28 @@ vault, at two levels:
   modularity. Many tiny components, or a modularity near zero, means there are no
   real clusters and the `[NO HUB]` rows are noise
 - Select any row to jump to that note
+
+## Recent Activity
+
+Use `<leader>oa` or `:ObsidianActive` to see what you have actually been working on.
+Where graph health is an audit you run occasionally, this is a daily view:
+
+- Backed by `notes-graph --since` (`notes-graph ~/notes --since 7d`). Takes a window
+  like `7d`, `36h` or `2w`; `:ObsidianActive 2w` passes it through, default `7d`
+- Notes touched in the window are **grouped by link community**, and the communities
+  are ranked by how many of their notes you touched. That answers "what was I working
+  on" better than a flat list of filenames does — `[c4 12/86]` means twelve of that
+  cluster's eighty-six notes
+- **`[ORPHANED]` rows are the point of the view**: notes you touched that still have
+  no links at all. You wrote them and never connected them, and you still remember
+  the context
+- Clusters and degrees are always computed over the **whole vault**, never just the
+  window — a note linked from fifty older notes is well-connected, not an orphan
+
+This relies on file modification times, so it is only as good as they are. If
+something rewrites mtimes across your vault (a sync client, a bulk reformat), the
+window fills with notes you did not touch. Check with
+`find ~/notes -name '*.md' -mtime -7 | wc -l` against your total.
 
 ## Dead Links
 

@@ -8,6 +8,7 @@
 --   graph.lua       - Orphan / sparsely-connected note detection
 --   deadlinks.lua   - Dead link detection with fuzzy match suggestions
 --   similar.lua     - Semantically similar but unlinked note detection
+--   activity.lua    - Recently touched notes, grouped by link community
 
 local vault_path = require("plugins.obsidian.utils").default_vault_path
 
@@ -31,6 +32,7 @@ return {
     local graph = require("plugins.obsidian.graph")
     local deadlinks = require("plugins.obsidian.deadlinks")
     local similar = require("plugins.obsidian.similar")
+    local activity = require("plugins.obsidian.activity")
 
     -- Setup all modules
     panel.setup()
@@ -41,6 +43,7 @@ return {
     graph.setup()
     deadlinks.setup()
     similar.setup()
+    activity.setup()
 
     -- Set up path settings and mappings for markdown
     vim.api.nvim_create_autocmd("FileType", {
@@ -89,6 +92,7 @@ return {
     vim.keymap.set("n", "<leader>og", "<cmd>ObsidianGraphHealth<cr>", { desc = "Obsidian orphan/sparse notes" })
     vim.keymap.set("n", "<leader>oD", "<cmd>ObsidianDeadLinks<cr>", { desc = "Obsidian dead links" })
     vim.keymap.set("n", "<leader>oS", "<cmd>ObsidianSimilar<cr>", { desc = "Obsidian similar unlinked notes" })
+    vim.keymap.set("n", "<leader>oa", "<cmd>ObsidianActive<cr>", { desc = "Obsidian recently active notes" })
   end,
   opts = {
     workspaces = {

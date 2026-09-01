@@ -31,6 +31,14 @@ is a hard rule, not a judgment call.
 - If a real-vault run is ever genuinely necessary to verify something, ask
   the user first — don't assume it's fine.
 
+## `--since` and modification times
+
+`activity.lua` / `notes-graph --since` treat mtime as "the user edited this". That
+held when it was checked (29 of 3,037 notes in a week), but it is an assumption about
+the user's sync setup, not a property of the code. If it ever stops holding, the
+window fills with untouched notes and the feature is worthless — re-measure before
+building anything else on top of it.
+
 ## Lua tests
 
 `utils_spec.lua` covers `utils.sanitize` and `utils.edit` — the two helpers standing

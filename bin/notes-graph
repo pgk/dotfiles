@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 
-"""Find orphan and sparsely-connected notes, and link communities with no hub, in a vault."""
+"""Report vault structure: orphan and sparse notes, hubless clusters, or recent activity."""
 
 import argparse
 import json
 import os
 import sys
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import notes_cluster
@@ -36,6 +37,134 @@ def classify(graph, min_links):
     orphans.sort(key=sort_key)
     sparse.sort(key=sort_key)
     return orphans, sparse
+
+
+DURATION_UNITS = {"h": 3600, "d": 86400, "w": 604800}
+
+
+def parse_duration(text):
+    """A --since value like 7d, 36h or 2w, as seconds."""
+    raw = str(text).strip().lower()
+    shown = notes_common.printable(text)
+    if not raw or raw[-1] not in DURATION_UNITS:
+        raise ValueError(f"--since needs a duration like 7d, 36h or 2w, got '{shown}'")
+    try:
+        amount = float(raw[:-1])
+    except ValueError:
+        raise ValueError(f"--since needs a number before '{raw[-1]}', got '{shown}'")
+    if amount <= 0:
+        raise ValueError(f"--since must be positive, got '{shown}'")
+    return amount * DURATION_UNITS[raw[-1]]
+
+
+def touched_since(files, cutoff):
+    """{path: mtime} for notes modified since cutoff — one stat per note."""
+    recent = {}
+    for path in files:
+        try:
+            mtime = os.path.getmtime(path)
+        except OSError as exc:
+            print(
+                f"warning: cannot stat {notes_common.printable(path)}: "
+                f"{notes_common.printable(exc)}",
+                file=sys.stderr,
+            )
+            continue
+        if mtime >= cutoff:
+            recent[path] = mtime
+    return recent
+
+
+def describe_age(seconds):
+    if seconds < DURATION_UNITS["h"]:
+        return f"{max(int(seconds // 60), 0)}m"
+    if seconds < DURATION_UNITS["d"]:
+        return f"{int(seconds // DURATION_UNITS['h'])}h"
+    return f"{int(seconds // DURATION_UNITS['d'])}d"
+
+
+def activity(graph, labels, recent, vault, now):
+    """Clusters ranked by how many of their notes were touched, plus touched orphans.
+
+    Clusters come from the whole vault, not from the recent notes alone: scoping the
+    graph to a time window would make a note linked from fifty older notes look like
+    an orphan.
+    """
+    sizes = {}
+    for cluster_id in labels.values():
+        sizes[cluster_id] = sizes.get(cluster_id, 0) + 1
+
+    def row(path):
+        entry = note_entry(path, graph)
+        entry["rel"] = os.path.relpath(path, vault)
+        entry["age"] = describe_age(now - recent[path])
+        entry["age_seconds"] = round(now - recent[path])
+        return entry
+
+    grouped = {}
+    orphaned = []
+    for path in sorted(recent, key=lambda p: (-recent[p], p)):
+        entry = row(path)
+        if entry["degree"] == 0:
+            orphaned.append(entry)
+            continue
+        grouped.setdefault(labels[path], []).append(entry)
+
+    clusters = [
+        {"cluster": cid, "size": sizes[cid], "touched": len(notes), "notes": notes}
+        for cid, notes in grouped.items()
+    ]
+    clusters.sort(key=lambda c: (-c["touched"], -c["touched"] / c["size"], c["cluster"]))
+    return clusters, orphaned
+
+
+def format_activity(clusters, orphaned, window, touched, total, vault, shape):
+    lines = [f"Active in the last {window} — {touched} of {total} notes touched in {vault}"]
+    if shape:
+        lines.append(notes_cluster.describe_shape(shape))
+    if not touched:
+        lines.append("")
+        lines.append("Nothing touched in that window.")
+        return "\n".join(lines)
+    printable = notes_common.printable
+
+    def note_lines(entries):
+        out = []
+        for e in entries:
+            plural = "link" if e["degree"] == 1 else "links"
+            out.append(
+                f"    {printable(e['name'])}  [{e['degree']} {plural}]  "
+                f"{e['age']}  {printable(e['rel'])}"
+            )
+        return out
+
+    for cluster in clusters:
+        lines.append("")
+        lines.append(
+            f"  cluster {cluster['cluster']}   {cluster['touched']} of "
+            f"{cluster['size']} notes touched"
+        )
+        lines += note_lines(cluster["notes"])
+    if orphaned:
+        lines.append("")
+        lines.append(f"  Touched and still orphaned ({len(orphaned)})")
+        lines += note_lines(orphaned)
+    return "\n".join(lines)
+
+
+def format_activity_json(clusters, orphaned, window, touched, total, vault, shape):
+    return json.dumps(
+        {
+            "vault": vault,
+            "window": window,
+            "touched": touched,
+            "total_notes": total,
+            "shape": shape,
+            "active_clusters": clusters,
+            "touched_orphans": orphaned,
+        },
+        indent=2,
+    )
 
 
 def hubless_clusters(neighbors, labels, min_coverage, vault):
@@ -130,6 +259,13 @@ def parse_args(argv):
         default=0.5,
         help="A cluster has a hub if one note links to at least this share of it; 0 < value <= 1 (default: 0.5)",
     )
+    parser.add_argument(
+        "--since",
+        metavar="DURATION",
+        default=None,
+        help="Report recent activity instead of health: notes touched in the last "
+        "7d / 36h / 2w, grouped by cluster",
+    )
     parser.add_argument("--json", action="store_true", help="Emit JSON instead of a text report")
     parser.add_argument(
         "--exclude",
@@ -146,6 +282,7 @@ def main(argv=None):
     try:
         if not 0 < args.hub_reach <= 1:
             raise ValueError(f"--hub-reach must be above 0 and at most 1, got {args.hub_reach}")
+        window = parse_duration(args.since) if args.since else None
         vault_spec = notes_common.require_vault(args.vault)
     except ValueError as exc:
         print(f"notes-graph: {exc}", file=sys.stderr)
@@ -164,6 +301,15 @@ def main(argv=None):
     neighbors = notes_cluster.adjacency(graph)
     labels = notes_cluster.louvain(neighbors)
     shape = notes_cluster.shape(neighbors, labels)
+
+    if window is not None:
+        now = time.time()
+        recent = touched_since(files, now - window)
+        clusters, orphaned = activity(graph, labels, recent, vault, now)
+        report = format_activity_json if args.json else format_activity
+        print(report(clusters, orphaned, args.since, len(recent), len(files), vault, shape))
+        return 0
+
     hubless = hubless_clusters(neighbors, labels, args.hub_reach, vault)
 
     if args.json:
