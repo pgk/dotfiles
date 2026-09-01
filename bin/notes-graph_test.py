@@ -146,6 +146,25 @@ class FormatTextTests(unittest.TestCase):
         self.assertNotIn("Orphans", text)
         self.assertIn("Sparse", text)
 
+    def test_splittable_section_shows_sections_as_split_points(self):
+        entries = [
+            {"name": "sprawl", "path": "/v/sprawl.md", "rel": "sprawl.md",
+             "words": 1500, "headers": ["Background", "Approach"], "out_degree": 1},
+        ]
+        text = notes_graph.format_text([], [], 3, 1, "/v", splittable=entries)
+        self.assertIn("Splittable (1)", text)
+        self.assertIn("sprawl", text)
+        self.assertIn("1500 words", text)
+        self.assertIn("sections: Background / Approach", text)
+
+    def test_all_clear_requires_no_splittable_notes_either(self):
+        entries = [
+            {"name": "sprawl", "path": "/v/sprawl.md", "rel": "sprawl.md",
+             "words": 1500, "headers": [], "out_degree": 0},
+        ]
+        text = notes_graph.format_text([], [], 3, 1, "/v", splittable=entries)
+        self.assertNotIn("All 1 notes", text)
+
 
 class JsonOutputTests(unittest.TestCase):
     def test_json_shape_and_counts(self):
@@ -173,6 +192,13 @@ class JsonOutputTests(unittest.TestCase):
         self.assertEqual({e["name"] for e in payload["sparse"]}, {"a", "b", "c"})
         for entry in payload["orphans"] + payload["sparse"]:
             self.assertEqual(set(entry), {"name", "path", "degree", "broken_links"})
+
+    def test_json_includes_splittable_key(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write_vault(tmp, {"a.md": "short"})
+            paths = list(notes_common.iter_markdown_files(tmp, []))
+            payload = json.loads(notes_graph.format_json([], [], 3, len(paths), tmp, splittable=[]))
+        self.assertEqual(payload["splittable"], [])
 
 
 class CliSubprocessTests(unittest.TestCase):
@@ -230,6 +256,18 @@ class CliSubprocessTests(unittest.TestCase):
             )
             payload = json.loads(result.stdout)
             self.assertEqual(payload["total_notes"], 1)
+
+    def test_cli_splittable_thresholds_are_wired(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write_vault(tmp, {"sprawl.md": "## A\ntext\n## B\ntext\n## C\ntext\n"})
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT_PATH), tmp, "--json", "--min-headers", "3", "--min-words", "9999"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            payload = json.loads(result.stdout)
+        self.assertEqual({e["name"] for e in payload["splittable"]}, {"sprawl"})
 
     def test_cli_rejects_nonexistent_vault(self):
         result = subprocess.run(

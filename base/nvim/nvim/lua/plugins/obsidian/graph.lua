@@ -1,4 +1,4 @@
--- Orphan, sparse and hubless-cluster detection, backed by the `notes-graph` CLI tool
+-- Orphan, sparse, splittable and hubless-cluster detection, backed by the `notes-graph` CLI tool
 local utils = require("plugins.obsidian.utils")
 
 local M = {}
@@ -13,7 +13,7 @@ local function num(v)
 end
 
 local function run_notes_graph()
-  return utils.run_notes_tool("notes-graph", {}, { "orphans", "sparse" })
+  return utils.run_notes_tool("notes-graph", {}, { "orphans", "sparse", "splittable" })
 end
 
 local function describe(entry, vault)
@@ -33,6 +33,20 @@ local function describe_cluster(entry)
     num(entry.size),
     num(entry.reach),
     num(entry.others),
+    sanitize(entry.rel)
+  )
+end
+
+local function describe_splittable(entry)
+  local headers = type(entry.headers) == "table" and entry.headers or {}
+  local plural = num(entry.out_degree) == 1 and "link" or "links"
+  return string.format(
+    "[SPLIT] %-30s (%d words, %d sections, %d outbound %s)  %s",
+    sanitize(entry.name),
+    num(entry.words),
+    #headers,
+    num(entry.out_degree),
+    plural,
     sanitize(entry.rel)
   )
 end
@@ -72,6 +86,15 @@ function M.check_health()
     path_by_line[line] = entry.entry_point
   end
 
+  -- Splittable notes next: a small, actionable category like hubless clusters,
+  -- which the orphan/sparse dump below would otherwise bury.
+  local splittable = type(result.splittable) == "table" and result.splittable or {}
+  for _, entry in ipairs(splittable) do
+    local line = describe_splittable(entry)
+    table.insert(lines, line)
+    path_by_line[line] = entry.path
+  end
+
   local nodes = {}
   vim.list_extend(nodes, result.orphans)
   vim.list_extend(nodes, result.sparse)
@@ -82,7 +105,10 @@ function M.check_health()
   end
 
   if #lines == 0 then
-    vim.notify("No orphaned or sparsely-connected notes, and every cluster has a hub", vim.log.levels.INFO)
+    vim.notify(
+      "No orphaned or sparsely-connected notes, every cluster has a hub, and nothing looks like it needs splitting",
+      vim.log.levels.INFO
+    )
     return
   end
 
@@ -104,7 +130,7 @@ end
 function M.setup()
   vim.api.nvim_create_user_command("ObsidianGraphHealth", function()
     M.check_health()
-  end, { desc = "Find orphan and sparsely-connected notes, and clusters with no hub" })
+  end, { desc = "Find orphan/sparse/splittable notes, and clusters with no hub" })
 end
 
 return M

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Report vault structure: orphan and sparse notes, hubless clusters, recent activity, or neglect."""
+"""Report vault structure: orphan/sparse/splittable notes, hubless clusters, recent activity, or neglect."""
 
 import argparse
 import json
@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import notes_cluster
 import notes_common
 import notes_neglected
+import notes_splittable
 
 
 def note_entry(path, graph):
@@ -199,9 +200,12 @@ def format_group(title, entries, vault):
     return lines
 
 
-def format_text(orphans, sparse, min_links, total, vault, hubless=(), shape=None):
-    if not orphans and not sparse and not hubless:
-        return f"All {total} notes in {vault} have at least {min_links} connection(s), and every cluster has a hub."
+def format_text(orphans, sparse, min_links, total, vault, hubless=(), shape=None, splittable=()):
+    if not orphans and not sparse and not hubless and not splittable:
+        return (
+            f"All {total} notes in {vault} have at least {min_links} connection(s), "
+            "every cluster has a hub, and nothing looks like it needs splitting."
+        )
     lines = [f"Scanned {total} notes in {vault} (sparse threshold: < {min_links} connections)"]
     if shape:
         lines.append(notes_cluster.describe_shape(shape))
@@ -214,10 +218,13 @@ def format_text(orphans, sparse, min_links, total, vault, hubless=(), shape=None
     if sparse:
         lines.append("")
         lines += format_group("Sparse", sparse, vault)
+    if splittable:
+        lines.append("")
+        lines += notes_splittable.format_lines(splittable)
     return "\n".join(lines)
 
 
-def format_json(orphans, sparse, min_links, total, vault, hubless=(), shape=None):
+def format_json(orphans, sparse, min_links, total, vault, hubless=(), shape=None, splittable=()):
     return json.dumps(
         {
             "vault": vault,
@@ -227,6 +234,7 @@ def format_json(orphans, sparse, min_links, total, vault, hubless=(), shape=None
             "hubless_clusters": list(hubless),
             "orphans": orphans,
             "sparse": sparse,
+            "splittable": list(splittable),
         },
         indent=2,
     )
@@ -287,6 +295,25 @@ def parse_args(argv):
         default=20,
         help="Rows to show in the --neglected report; 0 for all (default: 20)",
     )
+    parser.add_argument(
+        "--min-headers",
+        type=int,
+        default=3,
+        help="A note needs at least this many ##/### sections to be 'splittable' (default: 3)",
+    )
+    parser.add_argument(
+        "--min-words",
+        type=int,
+        default=1200,
+        help="...or at least this many words, for headerless sprawl (default: 1200)",
+    )
+    parser.add_argument(
+        "--max-out-degree",
+        type=int,
+        default=8,
+        help="A note linking out to at least this many others is treated as an index, "
+        "not a split candidate (default: 8)",
+    )
     parser.add_argument("--json", action="store_true", help="Emit JSON instead of a text report")
     parser.add_argument(
         "--exclude",
@@ -305,6 +332,12 @@ def main(argv=None):
             raise ValueError(f"--hub-reach must be above 0 and at most 1, got {args.hub_reach}")
         if args.limit < 0:
             raise ValueError(f"--limit cannot be negative, got {args.limit}")
+        if args.min_headers < 1:
+            raise ValueError(f"--min-headers must be at least 1, got {args.min_headers}")
+        if args.min_words < 1:
+            raise ValueError(f"--min-words must be at least 1, got {args.min_words}")
+        if args.max_out_degree < 0:
+            raise ValueError(f"--max-out-degree cannot be negative, got {args.max_out_degree}")
         if args.since is not None and args.neglected is not None:
             raise ValueError("--since and --neglected are opposite reports; pass one")
         window = parse_duration(args.since) if args.since is not None else None
@@ -338,11 +371,14 @@ def main(argv=None):
         return run_activity(args, files, graph, labels, shape, vault, window)
 
     hubless = hubless_clusters(neighbors, labels, args.hub_reach, vault)
+    splittable = notes_splittable.select(
+        files, name_index, args.min_headers, args.min_words, args.max_out_degree, vault
+    )
 
     if args.json:
-        print(format_json(orphans, sparse, args.min_links, len(files), vault, hubless, shape))
+        print(format_json(orphans, sparse, args.min_links, len(files), vault, hubless, shape, splittable))
     else:
-        print(format_text(orphans, sparse, args.min_links, len(files), vault, hubless, shape))
+        print(format_text(orphans, sparse, args.min_links, len(files), vault, hubless, shape, splittable))
     return 0
 
 
