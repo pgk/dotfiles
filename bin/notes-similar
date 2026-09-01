@@ -23,19 +23,9 @@ MAX_CHARS = 8000
 PREVIEW_CHARS = 60
 
 
-def strip_frontmatter(text):
-    if not text.startswith("---"):
-        return text
-    end = text.find("\n---", 3)
-    if end == -1:
-        return text
-    rest = text[end + 4 :]
-    return rest.split("\n", 1)[1] if "\n" in rest else ""
-
-
 def note_text(name, raw):
     """The string actually embedded: note name, then body without frontmatter."""
-    body = strip_frontmatter(raw).strip()
+    body = notes_common.strip_frontmatter(raw).strip()
     text = f"{name}\n\n{body}" if body else name
     return text[:MAX_CHARS]
 

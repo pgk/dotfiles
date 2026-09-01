@@ -202,6 +202,22 @@ class ExcludeMatchingTests(unittest.TestCase):
         self.assertEqual(notes_common.matched_excludes("top.md", ["journal"]), set())
 
 
+class StripFrontmatterTests(unittest.TestCase):
+    def test_strips_leading_frontmatter_block(self):
+        text = notes_common.strip_frontmatter("---\ntitle: X\ntags:\n  - a\n---\nThe body.\n")
+        self.assertEqual(text, "The body.\n")
+
+    def test_note_without_frontmatter_is_unchanged(self):
+        self.assertEqual(notes_common.strip_frontmatter("Just text.\n"), "Just text.\n")
+
+    def test_frontmatter_only_note_yields_empty_string(self):
+        self.assertEqual(notes_common.strip_frontmatter("---\ntitle: X\n---\n"), "")
+
+    def test_unterminated_frontmatter_is_left_alone(self):
+        text = notes_common.strip_frontmatter("---\ntitle: X\n")
+        self.assertEqual(text, "---\ntitle: X\n")
+
+
 class RequireVaultTests(unittest.TestCase):
     """The guard that keeps every notes-* tool from inventing a ~/notes default."""
 

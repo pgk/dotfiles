@@ -86,6 +86,17 @@ def iter_markdown_files(vault, excludes):
             print(f"warning: --exclude {printable(pattern)} matched nothing", file=sys.stderr)
 
 
+def strip_frontmatter(text):
+    """Drop a leading YAML frontmatter block (`---`-delimited); unterminated is left alone."""
+    if not text.startswith("---"):
+        return text
+    end = text.find("\n---", 3)
+    if end == -1:
+        return text
+    rest = text[end + 4 :]
+    return rest.split("\n", 1)[1] if "\n" in rest else ""
+
+
 def note_mtimes(files):
     """{path: mtime}, warning once per note that cannot be stat'd."""
     mtimes = {}
