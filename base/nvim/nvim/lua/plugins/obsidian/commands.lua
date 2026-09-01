@@ -11,9 +11,7 @@ function M.random()
     return
   end
 
-  math.randomseed(os.time())
-  local random_file = files[math.random(#files)]
-  vim.cmd("edit " .. vim.fn.fnameescape(random_file))
+  utils.edit(utils.sample(files, 1)[1])
 end
 
 function M.insert_link()

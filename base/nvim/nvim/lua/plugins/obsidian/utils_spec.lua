@@ -7,6 +7,91 @@
 -- they are the pieces worth pinning.
 local utils = require("plugins.obsidian.utils")
 
+describe("utils.sample", function()
+  it("returns exactly count distinct elements", function()
+    local picked = utils.sample({ "a", "b", "c", "d", "e" }, 3)
+    assert.equals(3, #picked)
+    local seen = {}
+    for _, v in ipairs(picked) do
+      assert.is_nil(seen[v])
+      seen[v] = true
+    end
+  end)
+
+  it("returns the whole list when asked for more than it holds", function()
+    assert.equals(2, #utils.sample({ "a", "b" }, 5))
+    assert.same({}, utils.sample({}, 5))
+  end)
+
+  it("leaves the source list alone", function()
+    local source = { "a", "b", "c" }
+    utils.sample(source, 2)
+    assert.same({ "a", "b", "c" }, source)
+  end)
+end)
+
+describe("utils.run_notes_tool", function()
+  local dir, argv_file, notified, real_notify
+
+  local function write_tool(name, body)
+    local path = dir .. "/" .. name
+    vim.fn.writefile(vim.list_extend({ "#!/bin/sh", 'echo "$@" > ' .. argv_file }, body), path)
+    vim.fn.setfperm(path, "rwxr-xr-x")
+  end
+
+  before_each(function()
+    dir = vim.fn.tempname()
+    vim.fn.mkdir(dir, "p")
+    argv_file = dir .. "/argv.txt"
+    vim.env.PATH = dir .. ":" .. vim.env.PATH
+    Obsidian = { dir = dir }
+    notified = {}
+    real_notify = vim.notify
+    vim.notify = function(msg, level)
+      table.insert(notified, { msg = msg, level = level })
+    end
+  end)
+
+  after_each(function()
+    vim.notify = real_notify
+    Obsidian = nil
+    vim.fn.delete(dir, "rf")
+  end)
+
+  it("passes the vault first, then extra arguments, then --json", function()
+    write_tool("notes-fake", { [[echo '{"orphans": []}']] })
+    local decoded = utils.run_notes_tool("notes-fake", { "--since", "7d" }, { "orphans" })
+    assert.same({}, decoded.orphans)
+    assert.equals(dir .. " --since 7d --json", vim.trim(vim.fn.readfile(argv_file)[1]))
+  end)
+
+  it("returns nil when a required key is missing", function()
+    write_tool("notes-fake", { [[echo '{"sparse": []}']] })
+    assert.is_nil(utils.run_notes_tool("notes-fake", {}, { "orphans" }))
+    assert.truthy(notified[#notified].msg:find("orphans"))
+  end)
+
+  it("returns nil on a non-zero exit, even with parseable output", function()
+    write_tool("notes-fake", { [[echo '{"orphans": []}']], "exit 3" })
+    assert.is_nil(utils.run_notes_tool("notes-fake", {}, { "orphans" }))
+  end)
+
+  it("returns nil on unparseable output", function()
+    write_tool("notes-fake", { "echo not-json" })
+    assert.is_nil(utils.run_notes_tool("notes-fake", {}, { "orphans" }))
+  end)
+
+  it("reports a missing tool at the caller's severity, naming what is lost", function()
+    local decoded = utils.run_notes_tool("notes-absent", {}, { "orphans" }, {
+      level = vim.log.levels.WARN,
+      context = "the daily note's neglected section",
+    })
+    assert.is_nil(decoded)
+    assert.equals(vim.log.levels.WARN, notified[1].level)
+    assert.truthy(notified[1].msg:find("neglected section", 1, true))
+  end)
+end)
+
 describe("utils.as_wikilink", function()
   it("wraps an ordinary note name", function()
     assert.equals("[[hubless-eight]]", utils.as_wikilink("hubless-eight"))

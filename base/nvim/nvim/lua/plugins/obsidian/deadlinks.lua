@@ -4,24 +4,7 @@ local utils = require("plugins.obsidian.utils")
 local M = {}
 
 local function run_notes_deadlinks()
-  if vim.fn.executable("notes-deadlinks") == 0 then
-    vim.notify("notes-deadlinks not found on PATH (see dotfiles/bin)", vim.log.levels.ERROR)
-    return nil
-  end
-
-  local result = vim.system({ "notes-deadlinks", utils.vault_path, "--json" }, { text = true }):wait(30000)
-  local output = result.stdout or ""
-  if result.stderr and result.stderr ~= "" then
-    vim.notify("notes-deadlinks: " .. result.stderr, vim.log.levels.WARN)
-  end
-
-  local ok, decoded = pcall(vim.json.decode, output)
-  if not ok or type(decoded) ~= "table" or type(decoded.notes_with_dead_links) ~= "table" then
-    local detail = output == "" and "(no output)" or output:sub(1, 200)
-    vim.notify("Failed to parse notes-deadlinks output: " .. detail, vim.log.levels.ERROR)
-    return nil
-  end
-  return decoded
+  return utils.run_notes_tool("notes-deadlinks", {}, { "notes_with_dead_links" })
 end
 
 local sanitize = utils.sanitize

@@ -13,24 +13,7 @@ local function num(v)
 end
 
 local function run_notes_graph()
-  if vim.fn.executable("notes-graph") == 0 then
-    vim.notify("notes-graph not found on PATH (see dotfiles/bin)", vim.log.levels.ERROR)
-    return nil
-  end
-
-  local result = vim.system({ "notes-graph", utils.vault_path, "--json" }, { text = true }):wait(30000)
-  local output = result.stdout or ""
-  if result.stderr and result.stderr ~= "" then
-    vim.notify("notes-graph: " .. sanitize(result.stderr), vim.log.levels.WARN)
-  end
-
-  local ok, decoded = pcall(vim.json.decode, output)
-  if not ok or type(decoded) ~= "table" or type(decoded.orphans) ~= "table" or type(decoded.sparse) ~= "table" then
-    local detail = output == "" and "(no output)" or output:sub(1, 200)
-    vim.notify("Failed to parse notes-graph output: " .. sanitize(detail), vim.log.levels.ERROR)
-    return nil
-  end
-  return decoded
+  return utils.run_notes_tool("notes-graph", {}, { "orphans", "sparse" })
 end
 
 local function describe(entry, vault)

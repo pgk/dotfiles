@@ -4,8 +4,6 @@ local anniversary = require("plugins.obsidian.anniversary")
 
 local M = {}
 
-math.randomseed((vim.uv or vim.loop).hrtime())
-
 local ON_THIS_DAY_LIMIT = 5
 local NEGLECTED_WINDOW = "180d"
 local NEGLECTED_SAMPLE = 3
@@ -13,18 +11,6 @@ local NEGLECTED_SAMPLE = 3
 -- between runs, so the same top rows would appear every morning until the notes
 -- were edited -- and opening one without editing it does not move its mtime.
 local NEGLECTED_POOL = 50
-
-local function pick_sample(pool, count)
-  local picked, taken = {}, {}
-  while #picked < count and #picked < #pool do
-    local idx = math.random(#pool)
-    if not taken[idx] then
-      taken[idx] = true
-      table.insert(picked, pool[idx])
-    end
-  end
-  return picked
-end
 
 local function on_this_day_lines(today_str)
   local vault = utils.vault_path
@@ -53,24 +39,13 @@ local function neglected_pool()
     vim.notify("notes-graph not found on PATH; skipping the neglected section", vim.log.levels.WARN)
     return nil
   end
-  local argv = {
-    "notes-graph", utils.vault_path,
-    "--neglected", NEGLECTED_WINDOW,
-    "--limit", tostring(NEGLECTED_POOL),
-    "--json",
-  }
-  local result = vim.system(argv, { text = true }):wait(30000)
-  local output = result.stdout or ""
-  if result.stderr and result.stderr ~= "" then
-    vim.notify("notes-graph: " .. utils.sanitize(result.stderr), vim.log.levels.WARN)
-  end
-  local ok, decoded = pcall(vim.json.decode, output)
-  if result.code ~= 0 or not ok or type(decoded) ~= "table" or type(decoded.neglected) ~= "table" then
-    local detail = output == "" and "(no output)" or output:sub(1, 200)
-    vim.notify(
-      "notes-graph --neglected failed, skipping that section: " .. utils.sanitize(detail),
-      vim.log.levels.WARN
-    )
+  local decoded = utils.run_notes_tool(
+    "notes-graph",
+    { "--neglected", NEGLECTED_WINDOW, "--limit", tostring(NEGLECTED_POOL) },
+    { "neglected" },
+    { level = vim.log.levels.WARN, context = "the daily note's neglected section" }
+  )
+  if not decoded then
     return nil
   end
   -- Shape-check every row. An unexpected type would otherwise throw out of
@@ -89,7 +64,7 @@ local function neglected_lines()
   if not pool or #pool == 0 then
     return {}
   end
-  local picked = pick_sample(pool, NEGLECTED_SAMPLE)
+  local picked = utils.sample(pool, NEGLECTED_SAMPLE)
   table.sort(picked, function(a, b)
     return a.degree > b.degree
   end)
@@ -130,19 +105,9 @@ local function get_random_review_notes(today_str, count)
     end
   end
 
-  if #files < count then
-    count = #files
-  end
-
   local selected = {}
-  local indices = {}
-  while #selected < count and #selected < #files do
-    local idx = math.random(#files)
-    if not indices[idx] then
-      indices[idx] = true
-      local note_name = vim.fn.fnamemodify(files[idx], ":t:r")
-      table.insert(selected, note_name)
-    end
+  for _, file in ipairs(utils.sample(files, count)) do
+    table.insert(selected, vim.fn.fnamemodify(file, ":t:r"))
   end
   return selected
 end
@@ -172,7 +137,7 @@ function M.open(offset)
     table.insert(lines, "")
     local random_notes = get_random_review_notes(today_str, 5)
     for _, note in ipairs(random_notes) do
-      table.insert(lines, "- [[" .. note .. "]]")
+      table.insert(lines, "- " .. utils.as_wikilink(note))
     end
     table.insert(lines, "")
 
@@ -224,16 +189,9 @@ function M.add_review()
     return
   end
 
-  -- Pick 5 random unique notes
   local selected = {}
-  local indices = {}
-  while #selected < 5 do
-    local idx = math.random(#files)
-    if not indices[idx] then
-      indices[idx] = true
-      local note_name = vim.fn.fnamemodify(files[idx], ":t:r")
-      table.insert(selected, "- [[" .. note_name .. "]]")
-    end
+  for _, file in ipairs(utils.sample(files, 5)) do
+    table.insert(selected, "- " .. utils.as_wikilink(vim.fn.fnamemodify(file, ":t:r")))
   end
 
   -- Append to daily note

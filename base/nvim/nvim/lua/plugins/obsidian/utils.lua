@@ -53,6 +53,69 @@ function M.edit(path)
 end
 
 
+-- Seeded once per session from a clock finer than one second: os.time() made two
+-- commands run in the same second replay the same draw.
+math.randomseed((vim.uv or vim.loop).hrtime())
+
+-- `count` distinct elements of `list`, in random order; fewer only if the list
+-- is shorter than that.
+function M.sample(list, count)
+  local picked, taken = {}, {}
+  count = math.min(count, #list)
+  while #picked < count do
+    local idx = math.random(#list)
+    if not taken[idx] then
+      taken[idx] = true
+      table.insert(picked, list[idx])
+    end
+  end
+  return picked
+end
+
+-- Run one of the notes-* CLI tools over the vault and decode its --json output.
+--
+-- `required` names the top-level keys the caller is about to index; a payload
+-- missing any of them fails here rather than at the indexing site. `opts.level`
+-- is the severity of a failure -- ERROR for a view the user explicitly asked
+-- for, WARN where the caller carries on without the result -- and `opts.context`
+-- names what is lost when that happens.
+--
+-- notes-similar is deliberately not routed through this: it runs asynchronously,
+-- takes the current note before the vault, and reports its own `error` field.
+function M.run_notes_tool(tool, extra_argv, required, opts)
+  opts = opts or {}
+  local level = opts.level or vim.log.levels.ERROR
+  local lost = opts.context and (" (" .. opts.context .. ")") or ""
+  if vim.fn.executable(tool) == 0 then
+    vim.notify(tool .. " not found on PATH (see dotfiles/bin)" .. lost, level)
+    return nil
+  end
+
+  local argv = { tool, M.vault_path }
+  vim.list_extend(argv, extra_argv or {})
+  table.insert(argv, "--json")
+
+  local result = vim.system(argv, { text = true }):wait(opts.timeout or 30000)
+  local output = result.stdout or ""
+  if result.stderr and result.stderr ~= "" then
+    vim.notify(tool .. ": " .. M.sanitize(result.stderr), vim.log.levels.WARN)
+  end
+
+  local ok, decoded = pcall(vim.json.decode, output)
+  if result.code ~= 0 or not ok or type(decoded) ~= "table" then
+    local detail = output == "" and "(no output)" or output:sub(1, 200)
+    vim.notify("Failed to parse " .. tool .. " output" .. lost .. ": " .. M.sanitize(detail), level)
+    return nil
+  end
+  for _, key in ipairs(required or {}) do
+    if type(decoded[key]) ~= "table" then
+      vim.notify(tool .. " output has no '" .. key .. "'" .. lost, level)
+      return nil
+    end
+  end
+  return decoded
+end
+
 setmetatable(M, {
   __index = function(_, key)
     if key == "vault_path" then

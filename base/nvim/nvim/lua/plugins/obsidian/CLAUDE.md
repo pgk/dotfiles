@@ -40,6 +40,23 @@ the user's sync setup, not a property of the code. If it ever stops holding, the
 window fills with untouched notes and the feature is worthless — re-measure before
 building anything else on top of it.
 
+## Talking to the CLI tools
+
+`utils.run_notes_tool(tool, extra_argv, required, opts)` is the one synchronous
+path from Lua to `bin/`: it builds `{tool, vault, extras..., --json}`, sanitizes
+stderr, and refuses a payload missing any `required` key so the failure lands
+there rather than at the indexing site. `graph.lua`, `activity.lua`,
+`deadlinks.lua` and `daily.lua` all go through it — four hand-rolled copies
+before, one of which forwarded stderr to `vim.notify` unsanitized.
+
+`similar.lua` is deliberately **not** routed through it: it runs asynchronously,
+puts the current note before the vault, and reports its own `error` field. Don't
+"finish the job" by folding it in.
+
+`utils.sample(list, count)` is the shared random-unique picker, and `utils.lua`
+seeds `math.random` once at load from `hrtime()` — `os.time()` has one-second
+resolution, so two commands run in the same second replayed the same draw.
+
 ## Lua tests
 
 `utils_spec.lua` covers `utils.sanitize` and `utils.edit` — the two helpers standing
@@ -54,8 +71,12 @@ nvim --headless \
 ```
 
 `anniversary_spec.lua` covers the "on this day" date logic behind the daily-note
-section. Both its functions are pure, so it needs no vault — run it the same way,
-swapping the filename.
+section — `date_from_name` and `on_this_day` are pure, `entries_for` gets a
+tempdir. Run it the same way, swapping the filename.
+
+`utils_spec.lua` also covers `as_wikilink`, `sample` and `run_notes_tool`; the
+last builds a fake tool on `$PATH` and asserts the argv order every caller
+depends on.
 
 The picker row builders (`describe`, `describe_cluster`, `header_for`) are still
 module-local and untested; export them if you need to pin their behaviour.
