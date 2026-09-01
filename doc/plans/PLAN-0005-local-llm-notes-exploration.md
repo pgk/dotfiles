@@ -492,11 +492,76 @@ All four of the previous round's open items are closed (`1a31d42`):
 - **No file in `bin/` is over the 400-line limit.** The notes-similar suite is split
   three ways over a shared `notes_similar_testkit.py`.
 
-Still open:
+---
 
+# Session 5 outcome (2026-09-01): a third view, and housekeeping
+
+## The recent-activity view (`eb6efb1`)
+
+`notes-graph --since 7d`, surfaced as `:ObsidianActive [window]` on `<leader>oa`.
+Notes touched in a window, grouped by link community, communities ranked by how many
+of their notes were touched, and a separate section for touched notes that still have
+no links at all.
+
+This came from the user asking, unprompted, how they might "view the most connected
+notes I recently touched". Worth recording as a direction, not just a feature:
+
+- **The first two tools are audits** — whole vault, run occasionally, "what is
+  structurally wrong". This one is a **daily view** — "what have I been working on".
+  Same graph, same clustering, different cadence. The user explicitly ruled out
+  historical tracking ("no need to track historically"), which removed the whole
+  snapshot/state-file branch and made it a pure filter.
+- **Clusters are the unit, not notes.** A flat list of 29 filenames does not answer
+  "what was I working on"; `12 of 86 notes touched` does. This is the first thing the
+  clustering earned beyond the hubless check.
+- **The invariant that matters:** the graph and its clusters are built over the whole
+  vault and only the *report* is filtered. Scoping the scan to the window would make
+  a note linked from fifty older notes look like an orphan. There is a test pinning
+  exactly that.
+- `Touched and still orphaned` is the section expected to earn its place daily.
+
+**The assumption underneath it was measured before building**, per the lesson from
+`01 Top Of Mind`. mtime has to mean "the user edited this"; the user ran
+`find ~/notes -name '*.md' -mtime -N | wc -l` and reported 24 / 29 / 3,037 for
+1 day / 7 days / total. About 1% weekly churn, so sync is not stamping mtimes and the
+feature is viable. **If that ever stops holding the feature is worthless** — re-measure
+before building anything else on it. Noted in the plugin's CLAUDE.md too.
+
+One open observation: 24 of the 29 were touched within a single day. Either a real
+burst of work or something bulk-touched them; the 36h view will show which.
+
+## obsidian.nvim deprecations (`2c5c7d2`)
+
+Three warnings on every startup, all from obsidian.nvim's 4.0 migration.
+`completion.nvim_cmp` / `completion.blink` are gone — completion now comes from the
+built-in `obsidian-ls` LSP, which starts itself — so the whole `completion` block was
+removed.
+
+`legacy_commands = false` was the involved one, and the useful distinction is worth
+keeping: **eleven of this config's fifteen `Obsidian*` commands are its own**, created
+with `nvim_create_user_command`, and are unaffected by the plugin's deprecation. Only
+four belonged to obsidian.nvim and moved to `Obsidian <subcommand>`: `search`, `new`,
+`backlinks`, `links`. Verified by loading headless and asserting every command still
+resolves while `:ObsidianSearch` no longer does.
+
+Two incidental findings: `ObsidianRename` was defined by both the plugin and
+`commands.lua` (ours won, because our modules run after `setup()`; the ambiguity is
+now gone), and the workflow doc listed `:ObsidianToday` for `<leader>od`, which has
+always run our own `:ObsidianDaily` — merely wrong before, and after this change it
+would have documented a command that does not exist.
+
+## Still open
+
+- **Whether any of the three views actually helps.** Only real use answers it. All
+  three now state the graph they ran on, so their output carries its own caveat.
+- Whether the 24-in-a-day mtime burst was real work or a bulk touch.
 - Louvain takes 9.6s on a pathological 3,035-note vault (average degree 200); the
-  picker passes a 30s timeout, which bounds the freeze rather than removing it.
+  pickers pass a 30s timeout, which bounds the freeze rather than removing it.
 - `graph.lua`'s `describe`, `describe_cluster` and `header_for` are module-local and
-  untested; export them if their behaviour needs pinning.
+  untested; export them if their behaviour needs pinning. `activity.lua`'s `describe`
+  is in the same position.
+- `deadlinks.lua` still renders through the shared `sanitize`, but nothing else in it
+  is tested.
 - Embedding-model swap (`bge-m3`) still unscheduled, not closed.
-- `master` is now **9 commits ahead of `origin/master`**, unpushed.
+- `master` is **18 commits ahead of `origin/master`** before this plan update,
+  unpushed. Pushing is the user's call and has never been done in these sessions.
