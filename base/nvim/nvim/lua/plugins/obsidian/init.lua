@@ -1,14 +1,4 @@
--- Obsidian integration for Neovim
--- Modular structure:
---   utils.lua       - Shared helper functions
---   panel.lua       - Links panel sidebar
---   transclusion.lua - Transclusion rendering
---   daily.lua       - Daily notes with template
---   commands.lua    - Random, insert link, rename commands
---   graph.lua       - Orphan / sparsely-connected note detection
---   deadlinks.lua   - Dead link detection with fuzzy match suggestions
---   similar.lua     - Semantically similar but unlinked note detection
---   activity.lua    - Recently touched notes, grouped by link community
+-- Obsidian integration for Neovim. See README.md for the module breakdown.
 
 local vault_path = require("plugins.obsidian.utils").default_vault_path
 
