@@ -3,6 +3,20 @@ local utils = require("plugins.obsidian.utils")
 
 local M = {}
 
+-- Computed from this file's own location rather than hardcoded, so a plugin-dir
+-- reshuffle can't silently point :ObsidianHelp at a stale path. commands.lua
+-- sits at .../nvim/lua/plugins/obsidian/commands.lua; the doc lives at
+-- .../nvim/obsidian-workflow.md, four path components up.
+local HELP_DOC = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":h:h:h:h") .. "/obsidian-workflow.md"
+
+function M.help()
+  if vim.fn.filereadable(HELP_DOC) == 0 then
+    vim.notify("Workflow doc not found: " .. HELP_DOC, vim.log.levels.WARN)
+    return
+  end
+  utils.edit(HELP_DOC)
+end
+
 function M.random()
   local files = utils.list_note_files()
 
@@ -246,6 +260,10 @@ function M.setup()
   vim.api.nvim_create_user_command("ObsidianExtract", function()
     M.extract_note()
   end, { range = true, desc = "Extract selection to new note" })
+
+  vim.api.nvim_create_user_command("ObsidianHelp", function()
+    M.help()
+  end, { desc = "Open the workflow reference doc (obsidian-workflow.md)" })
 end
 
 return M

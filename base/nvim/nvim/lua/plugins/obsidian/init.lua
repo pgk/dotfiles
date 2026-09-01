@@ -89,10 +89,11 @@ return {
     vim.keymap.set("n", "<leader>ot", "<cmd>ObsidianTransclusionToggle<cr>", { desc = "Obsidian toggle transclusions" })
     vim.keymap.set("n", "<leader>oR", "<cmd>ObsidianRename<cr>", { desc = "Obsidian rename note" })
     vim.keymap.set("v", "<leader>oe", "<cmd>ObsidianExtract<cr>", { desc = "Obsidian extract to note" })
-    vim.keymap.set("n", "<leader>og", "<cmd>ObsidianGraphHealth<cr>", { desc = "Obsidian orphan/sparse notes" })
+    vim.keymap.set("n", "<leader>og", "<cmd>ObsidianGraphHealth<cr>", { desc = "Obsidian orphan/sparse/splittable notes" })
     vim.keymap.set("n", "<leader>oD", "<cmd>ObsidianDeadLinks<cr>", { desc = "Obsidian dead links" })
     vim.keymap.set("n", "<leader>oS", "<cmd>ObsidianSimilar<cr>", { desc = "Obsidian similar unlinked notes" })
     vim.keymap.set("n", "<leader>oa", "<cmd>ObsidianActive<cr>", { desc = "Obsidian recently active notes" })
+    vim.keymap.set("n", "<leader>oh", "<cmd>ObsidianHelp<cr>", { desc = "Obsidian help (workflow doc)" })
   end,
   opts = {
     -- Our own commands (ObsidianGraphHealth, ObsidianActive, ...) are plain user
