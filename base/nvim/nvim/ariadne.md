@@ -31,6 +31,7 @@ it owns the vault plumbing and the `:Obsidian <subcommand>` form.
 | `<leader>oD` | `:AriadneDeadLinks` | Find dead links and possible matches |
 | `<leader>oS` | `:AriadneSimilar` | Find semantically similar but unlinked notes |
 | `<leader>ou` | `:AriadneDuplicates` | Find duplicate and near-duplicate notes |
+| `<leader>oX` | `:AriadneDelete` | Delete the current note, checking what links to it |
 
 ### In Markdown Files
 
@@ -70,6 +71,7 @@ it owns the vault plumbing and the `:Obsidian <subcommand>` form.
 | `:AriadneSimilar` | Find semantically similar but unlinked notes (picker) |
 | `:AriadneSimilarIndex[!]` | Refresh the embedding index in the background (`!` rebuilds from scratch) |
 | `:AriadneDuplicates [n]` | Find duplicate and near-duplicate notes (picker; `n` caps the "possible" band) |
+| `:AriadneDelete` | Move the current note to `.trash/`, asking first if anything links to it |
 
 ## Links Panel
 
@@ -333,6 +335,35 @@ at three thousand notes — which is why it is its own command and not something
 `:AriadneSimilar` pays for on every query. An up-to-date index does not make it
 quicker; it saves the embedding round trip, not the 4.6M comparisons. It runs
 async, so the editor stays usable while it works.
+
+## Deleting a Note
+
+Use `<leader>oX` or `:AriadneDelete` on the note you have open. It is a **soft**
+delete: the file moves to `<vault>/.trash/`, which every tool here skips because
+it is dot-prefixed, so the note leaves the graph, the index and the pickers at
+once but comes back with a single `mv`. A name already in `.trash/` is suffixed
+rather than overwritten, so deleting `inbox.md` twice keeps both.
+
+If nothing links to the note it goes straight to the trash. If something does,
+you get the count and the linking notes first, defaulting to Cancel:
+
+```
+Delete 'bounded-rationality'?
+
+3 link(s) in 2 note(s) point here:
+  project-plan (2)
+  reading-list (1)
+```
+
+Afterwards you are offered a cleanup: rewriting `[[bounded-rationality]]` to
+plain `bounded-rationality` in those notes, so the vault is left with no dead
+links. An alias is kept — `[[a-note|the other one]]` becomes `the other one` —
+and links to every other note are untouched. Decline and the dangling links stay
+for `:AriadneDeadLinks` to find.
+
+What counts as a link is resolved properly rather than matched as text, so
+`[[a-note]]`, `[[Dir/A-Note]]`, `[[a-note#Heading]]` and `![[a-note]]` all count,
+while `[[a-note-elsewhere]]` and a bare mention in prose do not.
 
 ## Quick Capture Workflow
 

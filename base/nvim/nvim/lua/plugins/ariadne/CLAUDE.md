@@ -81,6 +81,30 @@ the scan itself is every-pair, 48s at 3040 notes — and a warm cache does not
 shorten it.
 Don't fold it into `similar.lua`, and don't make a query pay for it.
 
+## Deleting notes
+
+`:AriadneDelete` is the only irreversible-looking command here, so it is a soft
+delete: the note moves to `<vault>/.trash/`, which `iter_markdown_files` skips
+along with every other dot-prefixed directory. Nothing else had to change for it
+to disappear from the graph, the index and the pickers.
+
+Two rules it must keep:
+
+- **Resolve links, don't match text.** `wikilinks.key()` mirrors
+  `ariadne_common.resolve_link` — basename, no anchor, lowercased — so
+  `[[Dir/A-Note#Top]]` counts as a link to `a-note`. `utils.get_backlinks` and
+  `commands.rewrite_links` both compare the raw bracketed text instead and miss
+  the path and anchor forms. That is survivable for a sidebar and not for
+  deciding whether a delete needs confirming, which is why neither is reused
+  here. The grep is only a prefilter; it searches the bare name, not `[[name`,
+  so those forms reach the exact check at all.
+- **Compare resolved paths.** nvim reports a buffer's name with symlinks
+  resolved, so a vault configured as `/var/...` yields buffers under
+  `/private/var/...` and a plain prefix test fails on a note that really is in
+  the vault. `delete.lua` resolves both sides. `similar.lua` and
+  `commands.smart_follow_link` still do the raw prefix test and would refuse to
+  work on a symlinked vault — untouched here, but wrong.
+
 ## Lua tests
 
 `utils_spec.lua` covers `utils.sanitize` and `utils.edit` — the two helpers standing
@@ -101,6 +125,14 @@ tempdir. Run it the same way, swapping the filename.
 `utils_spec.lua` also covers `as_wikilink`, `sample`, `write` and
 `run_ariadne_tool`; the last builds a fake tool on `$PATH` and asserts the argv
 order every caller depends on.
+
+`wikilinks_spec.lua` pins the link grammar — resolution keys, display text and
+unwrapping — against the path, anchor, alias and embed forms. `delete_spec.lua`
+drives the whole delete against tempdir vaults with `Obsidian.dir` pointed at
+them and `vim.fn.confirm` stubbed to a canned list of answers, covering the
+confirm gate, cancellation, the unwrap, the `.trash/` collision suffix and every
+refusal. Those two are the only command-level Lua coverage in the directory;
+the pickers remain untested.
 
 ## Opening and writing paths
 

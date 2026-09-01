@@ -24,6 +24,7 @@ return {
     local deadlinks = require("plugins.ariadne.deadlinks")
     local similar = require("plugins.ariadne.similar")
     local duplicates = require("plugins.ariadne.duplicates")
+    local delete = require("plugins.ariadne.delete")
     local activity = require("plugins.ariadne.activity")
 
     -- Setup all modules
@@ -36,6 +37,7 @@ return {
     deadlinks.setup()
     similar.setup()
     duplicates.setup()
+    delete.setup()
     activity.setup()
 
     -- Set up path settings and mappings for markdown
@@ -87,6 +89,7 @@ return {
     vim.keymap.set("n", "<leader>oS", "<cmd>AriadneSimilar<cr>", { desc = "Ariadne similar unlinked notes" })
     vim.keymap.set("n", "<leader>ou", "<cmd>AriadneDuplicates<cr>", { desc = "Ariadne duplicate notes" })
     vim.keymap.set("n", "<leader>oa", "<cmd>AriadneActive<cr>", { desc = "Ariadne recently active notes" })
+    vim.keymap.set("n", "<leader>oX", "<cmd>AriadneDelete<cr>", { desc = "Ariadne delete note (to .trash/)" })
     vim.keymap.set("n", "<leader>oh", "<cmd>AriadneHelp<cr>", { desc = "Ariadne help (workflow doc)" })
   end,
   opts = {

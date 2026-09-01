@@ -29,6 +29,8 @@ thin Lua layer that wires their `--json` output into fzf-lua pickers.
 | `deadlinks.lua` | Dead `[[links]]` with fuzzy-matched candidates (`:AriadneDeadLinks`) |
 | `similar.lua` | Semantically similar but unlinked notes, via a local embedding server (`:AriadneSimilar`) |
 | `duplicates.lua` | Near-duplicate notes, on embedding *and* title similarity (`:AriadneDuplicates`) |
+| `delete.lua` | Move the current note to `.trash/`, gating on what links to it (`:AriadneDelete`) |
+| `wikilinks.lua` | Parsing and rewriting `[[links]]` — resolution keys, display text, unwrapping |
 | `activity.lua` | Recently touched notes, grouped by link community (`:AriadneActive`) |
 
 `dev-vault/` is a permanent synthetic fixture — never the real vault — used
