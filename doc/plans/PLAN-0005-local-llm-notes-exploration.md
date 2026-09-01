@@ -1,7 +1,170 @@
+# PLAN-0005 — graph tooling for the notes vault
+
+**Status as of 2026-09-01.** Read this section; everything below it is the
+reasoning archive, session by session. The archive is worth reading before
+re-opening a closed decision, and worth *not* trusting for facts — the session-1
+handoff at the top of it is stale in specific ways, flagged where it starts.
+
+## Goal
+
+Make the private `~/notes` Zettelkasten (~3,037 notes, English + Greek, Neovim +
+obsidian.nvim) more navigable, using only what the vault already contains. An
+exploration of local LLMs for this concluded **no LLM earns a place here**
+(Session 2 below, with the reasoning and the closed-idea list). The work is graph
+analysis instead.
+
+## What exists
+
+Four stdlib-only CLI tools in `bin/`, each surfaced through an fzf-lua picker.
+**None has a `~/notes` default** — every invocation names the vault, as an
+argument or via `$NOTES_VAULT` (`notes_common.require_vault`).
+
+| Tool | Command | Answers |
+|---|---|---|
+| `notes-graph` | `:ObsidianGraphHealth` `<leader>og` | Orphans, sparse notes, and **clusters with no hub** |
+| `notes-graph --since 7d` | `:ObsidianActive [window]` `<leader>oa` | **What have I been working on**, grouped by cluster |
+| `notes-deadlinks` | `:ObsidianDeadLinks` `<leader>oD` | Dead wikilinks, with fuzzy candidates |
+| `notes-similar` | `:ObsidianSimilar` `<leader>oS` | Semantically similar but unlinked notes, **bridging pairs first** |
+
+Shared modules: `notes_common.py` (walking, links, the vault guard, `--exclude`),
+`notes_cluster.py` (graph construction, deterministic Louvain, coverage),
+`notes_embed_cache.py` / `notes_embed_client.py`, `notes_similar_report.py`.
+Lua lives in `base/nvim/nvim/lua/plugins/obsidian/`.
+
+Only `notes-similar` touches the network, and only a loopback embedding endpoint
+unless `--allow-remote-endpoint`.
+
+## Decisions that should not be relitigated
+
+Each has its reasoning in the archive below; the one-line why is here.
+
+- **No local LLM.** The user stopped using tags (*"I find connections more
+  important"*), and the remaining jobs sit on the wrong side of the
+  surface-vs-meaning line. Session 2 has the closed-idea table — do not
+  re-propose from it without new information.
+- **Louvain, not label propagation.** It yields a modularity score, and the real
+  vault is never measured, so the tools cannot be tuned and must instead report
+  the shape they found for the reader to judge. Every view prints that shape.
+- **Coverage, not degree dominance, decides "has a hub".** Coverage is
+  scale-sensitive, so no separate minimum-cluster-size threshold has to be
+  invented. A map of content scores 1.0 at every size.
+- **Bridge ranking limits each group separately.** One shared limit made the
+  within-cluster side permanently invisible, which defeated the comparison the
+  feature exists for. See [[reordering-plus-truncation-is-two-decisions]].
+- **Clusters and degrees always come from the whole vault**, never from a filter
+  (`--since`, `--exclude`). Scoping the graph would make a note linked from fifty
+  older notes look like an orphan. Tested.
+- **`--since` switches the report** rather than adding a section: twelve active
+  notes would be buried under a thousand sparse rows.
+
+## Hard rules
+
+- **Never read, scan, or point anything at `~/notes`** — not to reproduce a bug,
+  not to measure. Use `base/nvim/nvim/lua/plugins/obsidian/dev-vault` (22
+  synthetic notes) or a `tempfile` dir. Broken twice historically; see
+  `bin/CLAUDE.md` and the plugin's `CLAUDE.md`, and
+  [[zsh-no-word-splitting-in-test-loops]].
+- **Brief subagents explicitly** — they inherit none of the above.
+- Files ≤400 lines, functions ≤50. Nothing in `bin/` currently exceeds either.
+- Stdlib only in `bin/`. numpy is not installed.
+
+## Two measured assumptions, to re-measure rather than trust
+
+1. **mtime means "the user edited this."** Measured 2026-09-01: 24 / 29 / 3,037
+   notes for 1 day / 7 days / total, so ~1% weekly churn — sync is not stamping
+   mtimes. `--since` is worthless if this stops holding.
+2. **The wikilink graph is connected enough for clustering to mean anything.**
+   Never measured on the real vault by instruction, which is why every view
+   prints its component count and modularity as a self-caveat.
+
+## How to verify
+
+```sh
+cd ~/dotfiles/bin
+for f in *_test.py; do printf "%-34s " "$f"; python3 "$f" 2>&1 | tail -1; done
+```
+
+Expect **304 tests across 11 suites, all OK** (25/25/46/33/29/29/33/21/20/17/26).
+
+```sh
+cd ~/dotfiles && nvim --headless \
+  -c "set rtp+=$HOME/.local/share/nvim/lazy/plenary.nvim" \
+  -c "set rtp+=$PWD/base/nvim/nvim" \
+  -c "PlenaryBustedFile base/nvim/nvim/lua/plugins/obsidian/utils_spec.lua"
+```
+
+Expect **8 successes, 0 failures**. Smoke test against the fixture, never `~/notes`:
+
+```sh
+V="$PWD/base/nvim/nvim/lua/plugins/obsidian/dev-vault"
+python3 bin/notes-graph "$V"              # 1 hubless cluster, modularity 0.634
+python3 bin/notes-graph "$V" --since 1h   # after `touch`ing a fixture note
+```
+
+There is no Makefile target, no linter and no type checker configured — the
+suites above are the whole gate.
+
+## State
+
+**Done and reviewed** (code review + security review, findings triaged, fixes
+mutation-tested): all four tools, the clustering module, the activity view, the
+`--exclude` fix, non-finite embedding rejection, the Lua safety helpers and their
+specs, and the obsidian.nvim 4.0 deprecation cleanup.
+
+**Not done:** nothing is in progress. `master` is **19 commits ahead of
+`origin/master` and unpushed** — pushing has never been done in these sessions and
+is the user's call. `base/nvim/nvim/lazy-lock.json` is modified, predates this
+work, and is deliberately left alone.
+
+## Open questions
+
+- **Does any of this actually help?** The real question, and only use answers it.
+  Specifically: do `notes-similar`'s bridging hits read as better connections than
+  the within-cluster ones, and are the `[NO HUB]` clusters worth writing a map of
+  content for? Both views are instrumented to say when they are lying.
+- Was the 24-notes-in-one-day mtime reading real work or a bulk touch? The `36h`
+  activity view answers it.
+- Cross-lingual quality is still unverified: `embeddinggemma` was picked for being
+  multilingual but its Greek was never measured. A swap to `bge-m3` is a config
+  change plus `--rebuild`, no code. Not closed, not scheduled.
+
+## Known gaps, none blocking
+
+- Louvain takes ~9.6s on a pathological 3,035-note vault (average degree 200).
+  The pickers pass a 30s timeout, which bounds the freeze rather than removing it.
+- `graph.lua` / `activity.lua` row builders (`describe`, `describe_cluster`,
+  `header_for`) are module-local and untested; export them to pin their behaviour.
+  Three of one review round's four findings were in Lua, where there were no tests.
+- `bin/mknote` writes to `~/Sync/notes` while everything else uses `~/notes`.
+  Flagged four times across sessions, never resolved. Probably stale — ask.
+
+## Suggested skills for the next session
+
+`/tdd` for new behaviour, `/done` before claiming anything is finished (it owns
+the review gate and caught a HIGH severity bug this round), and
+`/receiving-code-review` when triaging what the reviewers return — two of their
+findings this session were wrong on sub-points and needed checking, not obeying.
+
+## Next action
+
+**Nothing is queued.** Use the tools for a week, then decide whether bridge
+ranking and hubless clusters earn their place. If they do not, the honest move is
+to remove them rather than tune them.
+
+---
+
+# Reasoning archive
+
 # Handoff: exploring local LLMs for the notes vault
 
 Written at the end of the session that shipped `notes-similar`
-([[PLAN-0004-semantic-similar-notes]]), for a fresh session with no memory of it.
+([[PLAN-0004-semantic-similar-notes]]).
+
+> **Stale — kept for its reasoning, not its facts.** Superseded by the status
+> section at the top of this file. Specifically wrong now: `dev-vault` has 22
+> notes, not 6; `notes-graph` and `notes-deadlinks` no longer default to
+> `~/notes`; the test count is 304, not 160; and the "ideas raised but NOT
+> built" list below was resolved in Session 2.
 
 ## What the next session is being asked to do
 
