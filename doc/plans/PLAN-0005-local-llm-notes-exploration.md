@@ -111,22 +111,38 @@ mutation-tested): all four tools, the clustering module, the activity view, the
 `--exclude` fix, non-finite embedding rejection, the Lua safety helpers and their
 specs, and the obsidian.nvim 4.0 deprecation cleanup.
 
-**Not done:** nothing is in progress. `master` is **19 commits ahead of
-`origin/master` and unpushed** — pushing has never been done in these sessions and
-is the user's call. `base/nvim/nvim/lazy-lock.json` is modified, predates this
-work, and is deliberately left alone.
+**Not done:** nothing is in progress. `master` is **many commits ahead of
+`origin/master` and unpushed** (check with `git rev-list --count
+origin/master..master`) — pushing has never been done in these sessions and is
+the user's call. `base/nvim/nvim/lazy-lock.json` is modified, predates this work,
+and is deliberately left alone.
+
+`bin/mknote` was **deleted 2026-09-01** — it wrote `TAGS:`-style notes to
+`~/Sync/notes`, a path and a format the user had already abandoned. Nothing
+referenced it.
 
 ## Open questions
 
-- **Does any of this actually help?** The real question, and only use answers it.
-  Specifically: do `notes-similar`'s bridging hits read as better connections than
-  the within-cluster ones, and are the `[NO HUB]` clusters worth writing a map of
-  content for? Both views are instrumented to say when they are lying.
 - Was the 24-notes-in-one-day mtime reading real work or a bulk touch? The `36h`
-  activity view answers it.
-- Cross-lingual quality is still unverified: `embeddinggemma` was picked for being
-  multilingual but its Greek was never measured. A swap to `bge-m3` is a config
-  change plus `--rebuild`, no code. Not closed, not scheduled.
+  activity view answers it. Still unanswered.
+- Do `notes-similar`'s bridging hits read as better connections than the
+  within-cluster ones, and are the `[NO HUB]` clusters worth writing a map of
+  content for? Never compared side by side. This is now a tuning question, not a
+  keep-or-remove one — see below.
+
+## Answered by use, 2026-09-01
+
+The user ran the tools and reported back. These are settled unless the tools
+change:
+
+- **Does any of this actually help?** Yes — *"generally it helps"*. The four
+  views stay. The plan's earlier standing instruction to delete bridge ranking
+  and hubless clusters if they did not earn their place is **discharged**; they
+  did.
+- **Cross-lingual quality.** Greek/English relatedness is *"ok for now"* in
+  practice, so `embeddinggemma` stays. The measurement was never taken and the
+  `bge-m3` swap (config plus `--rebuild`, no code) is still the fallback if the
+  Greek side ever reads wrong.
 
 ## Known gaps, none blocking
 
@@ -135,8 +151,6 @@ work, and is deliberately left alone.
 - `graph.lua` / `activity.lua` row builders (`describe`, `describe_cluster`,
   `header_for`) are module-local and untested; export them to pin their behaviour.
   Three of one review round's four findings were in Lua, where there were no tests.
-- `bin/mknote` writes to `~/Sync/notes` while everything else uses `~/notes`.
-  Flagged four times across sessions, never resolved. Probably stale — ask.
 
 ## Suggested skills for the next session
 
@@ -147,9 +161,8 @@ findings this session were wrong on sub-points and needed checking, not obeying.
 
 ## Next action
 
-**Nothing is queued.** Use the tools for a week, then decide whether bridge
-ranking and hubless clusters earn their place. If they do not, the honest move is
-to remove them rather than tune them.
+**Nothing is queued.** The trial period is over and the tools passed, so the
+next move is whatever the user names — not a removal pass.
 
 ---
 
