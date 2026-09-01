@@ -1,0 +1,361 @@
+#!/usr/bin/env python3
+
+"""Find semantically similar but unlinked notes in a wikilink-based markdown vault."""
+
+import argparse
+import hashlib
+import math
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import ariadne_cluster
+import ariadne_common
+import ariadne_duplicates
+import ariadne_embed_cache
+import ariadne_embed_client
+import ariadne_similar_report
+
+EmbedUnavailable = ariadne_embed_cache.EmbedUnavailable
+_printable = ariadne_common.printable
+require_vault = ariadne_common.require_vault
+
+MAX_CHARS = 8000
+PREVIEW_CHARS = 60
+
+
+def note_text(name, raw):
+    """The string actually embedded: note name, then body without frontmatter.
+
+    Wikilinks are flattened to their displayed words first. `[[Working Memory]]`
+    is two words of meaning wrapped in punctuation, and embedding the punctuation
+    spends the model's budget on brackets and slugs. Changing this changes every
+    note's content hash, which is what forces the one-off re-index.
+    """
+    body = ariadne_common.wikilink_display(ariadne_common.strip_frontmatter(raw)).strip()
+    text = f"{name}\n\n{body}" if body else name
+    return text[:MAX_CHARS]
+
+
+def content_hash(text):
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:32]
+
+
+def preview_of(text):
+    """First non-empty body line, for picker rows. Assumes note_text() output."""
+    lines = text.split("\n\n", 1)
+    body = lines[1] if len(lines) > 1 else ""
+    for line in body.split("\n"):
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            if len(stripped) > PREVIEW_CHARS:
+                return stripped[:PREVIEW_CHARS] + "…"
+            return stripped
+    return ""
+
+
+def scan_vault(vault, excludes):
+    """One pass per note: read it, hash the embed text, extract its wikilinks."""
+    notes = []
+    for path in ariadne_common.iter_markdown_files(vault, excludes):
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                raw = f.read()
+        except OSError as exc:
+            print(f"warning: skipping unreadable note {_printable(path)}: {_printable(exc)}", file=sys.stderr)
+            continue
+        name = os.path.splitext(os.path.basename(path))[0]
+        text = note_text(name, raw)
+        notes.append(
+            {
+                "name": name,
+                "path": path,
+                "hash": content_hash(text),
+                "links": ariadne_common.extract_links(raw),
+                "text": text,
+            }
+        )
+    return notes
+
+
+def linked_paths(target, notes, name_index):
+    """Paths linked to the target in either direction."""
+    linked = set()
+    for link in target["links"]:
+        path = ariadne_common.resolve_link(link, name_index)
+        if path:
+            linked.add(path)
+    for note in notes:
+        if note["path"] == target["path"]:
+            continue
+        for link in note["links"]:
+            if ariadne_common.resolve_link(link, name_index) == target["path"]:
+                linked.add(note["path"])
+                break
+    return linked
+
+
+def find_similar(target, notes, cached, name_index, limit, include_linked, *, clusters=None, bridge_first=True):
+    target_vec = cached.get((target["path"], target["hash"]))
+    if target_vec is None:
+        raise EmbedUnavailable(f"no embedding for target note: {_printable(target['name'])}")
+
+    # Always computed: under --all it still labels each row, it just stops filtering.
+    linked = linked_paths(target, notes, name_index)
+    # No cluster data means no bridging signal, so every pair scores alike and
+    # ranking falls back to similarity alone.
+    clusters = clusters or {}
+    target_cluster = clusters.get(target["path"])
+    results = []
+    for note in notes:
+        if note["path"] == target["path"]:
+            continue
+        if note["path"] in linked and not include_linked:
+            continue
+        vec = cached.get((note["path"], note["hash"]))
+        if vec is None:
+            continue
+        cluster = clusters.get(note["path"])
+        results.append(
+            {
+                "name": note["name"],
+                "path": note["path"],
+                "score": round(math.sumprod(target_vec, vec), 4),
+                "linked": note["path"] in linked,
+                "crosses": cluster != target_cluster,
+                "cluster": cluster,
+                "preview": preview_of(note["text"]),
+            }
+        )
+    results.sort(key=lambda r: (-r["score"], r["name"].lower()))
+    if not bridge_first:
+        return results[:limit]
+    # Cross-cluster pairs first: a link into a neighbourhood the target is already
+    # part of adds little, while one that bridges clusters is structurally novel.
+    # A hard partition rather than a weighted blend, because a weight would be a
+    # number tuned against a vault that is never measured — but the limit applies
+    # to each side separately, or the far larger cross-cluster pool would bury the
+    # within-cluster hits entirely and there would be nothing to compare against.
+    crossing = [r for r in results if r["crosses"]]
+    within = [r for r in results if not r["crosses"]]
+    return crossing[:limit] + within[:limit]
+
+
+def cluster_notes(notes, name_index):
+    """Wikilink communities over the notes already scanned, plus the graph they came from."""
+    neighbors = ariadne_cluster.adjacency_from_links(notes, name_index)
+    labels = ariadne_cluster.louvain(neighbors)
+    return labels, ariadne_cluster.shape(neighbors, labels)
+
+
+def resolve_target(spec, notes, name_index):
+    by_path = {n["path"]: n for n in notes}
+    candidate = os.path.abspath(os.path.expanduser(spec))
+    if candidate in by_path:
+        return by_path[candidate]
+    stem = os.path.splitext(os.path.basename(spec))[0]
+    path = name_index.get(stem.lower())
+    return by_path.get(path) if path else None
+
+
+def parse_args(argv):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "positional",
+        nargs="*",
+        metavar="ARG",
+        help="TARGET VAULT — note to compare against, by path or name. "
+        "With --index or --duplicates, just VAULT. VAULT may come from $NOTES_VAULT instead",
+    )
+    parser.add_argument("--index", action="store_true", help="Build or refresh the whole embedding index, then exit")
+    parser.add_argument("--rebuild", action="store_true", help="With --index, discard the cache and re-embed everything")
+    ariadne_duplicates.add_arguments(parser)
+    parser.add_argument("-n", "--limit", type=int, default=10, help="Maximum results per group, so bridge ranking can return up to twice this; one shared limit under --no-bridge. Under --duplicates it caps the 'possible' band only, never the duplicates (default: 10)")
+    parser.add_argument("--all", action="store_true", help="Include notes already linked to the target")
+    parser.add_argument(
+        "--no-bridge",
+        action="store_true",
+        help="Rank purely by similarity, without grouping cluster-crossing pairs above the rest",
+    )
+    parser.add_argument("--json", action="store_true", help="Emit JSON instead of a text report")
+    parser.add_argument(
+        "--max-refresh",
+        type=int,
+        default=50,
+        help="Refuse a query needing more than this many embeddings; run --index instead (default: 50)",
+    )
+    parser.add_argument(
+        "--endpoint",
+        default=os.environ.get("NOTES_EMBED_URL", ariadne_embed_client.DEFAULT_ENDPOINT),
+        help=f"OpenAI-compatible embeddings base URL (default: $NOTES_EMBED_URL or {ariadne_embed_client.DEFAULT_ENDPOINT})",
+    )
+    parser.add_argument(
+        "--allow-remote-endpoint",
+        action="store_true",
+        help="Permit a non-loopback endpoint, sending note text off this machine",
+    )
+    parser.add_argument(
+        "--model",
+        default=os.environ.get("NOTES_EMBED_MODEL", ariadne_embed_client.DEFAULT_MODEL),
+        help=f"Embedding model name (default: $NOTES_EMBED_MODEL or {ariadne_embed_client.DEFAULT_MODEL})",
+    )
+    parser.add_argument(
+        "--exclude",
+        action="append",
+        metavar="GLOB",
+        default=None,
+        help="Glob pattern, relative to vault, to exclude from the scan (repeatable)",
+    )
+    return parser.parse_args(argv)
+
+
+def run_index(args, vault, notes, embedder):
+    cdir = ariadne_embed_cache.cache_dir(vault)
+    cached, dims = ({}, 0) if args.rebuild else ariadne_embed_cache.load_cache(cdir, args.model)
+    stale = len([n for n in notes if (n["path"], n["hash"]) not in cached])
+    if stale:
+        ariadne_embed_client.announce(vault, args.endpoint, args.model, stale)
+    try:
+        dims, embedded = ariadne_embed_cache.refresh(
+            notes, cached, dims, embedder, progress=stale > ariadne_embed_cache.BATCH_SIZE
+        )
+    except EmbedUnavailable:
+        # Keep what this run already embedded, so a transient failure partway through
+        # a multi-minute index isn't thrown away.
+        done = [n for n in notes if (n["path"], n["hash"]) in cached]
+        if done:
+            # dims is still 0 on a first-ever index; take it from what was embedded.
+            width = dims or len(next(iter(cached.values())))
+            ariadne_embed_cache.save_cache(cdir, args.model, width, done, cached)
+            print(f"ariadne-similar: saved {len(done)} embeddings before the failure", file=sys.stderr)
+        raise
+    if dims == 0:
+        print(f"ariadne-similar: nothing to index in {vault}", file=sys.stderr)
+        return 1
+    ariadne_embed_cache.save_cache(cdir, args.model, dims, notes, cached)
+    print(f"Indexed {len(notes)} notes ({embedded} newly embedded, {dims} dims) in {cdir}")
+    return 0
+
+
+def load_or_refresh(args, vault, notes, embedder):
+    """The cache, topped up in place. Refuses to embed a whole vault behind the user's back."""
+    cdir = ariadne_embed_cache.cache_dir(vault)
+    cached, dims = ariadne_embed_cache.load_cache(cdir, args.model)
+    missing = len([n for n in notes if (n["path"], n["hash"]) not in cached])
+    if missing > args.max_refresh:
+        raise EmbedUnavailable(
+            f"{missing} of {len(notes)} notes are unindexed (limit {args.max_refresh}) — run: ariadne-similar --index"
+        )
+    if missing:
+        ariadne_embed_client.announce(vault, args.endpoint, args.model, missing)
+
+    dims, embedded = ariadne_embed_cache.refresh(notes, cached, dims, embedder)
+    if embedded:
+        ariadne_embed_cache.save_cache(cdir, args.model, dims, notes, cached)
+    return cached
+
+
+def run_query(args, vault, target_spec, notes, name_index, embedder):
+    target = resolve_target(target_spec, notes, name_index)
+    if target is None:
+        safe_spec = _printable(target_spec)
+        print(f"ariadne-similar: no note matching '{safe_spec}' in {vault}", file=sys.stderr)
+        if args.json:
+            print(ariadne_similar_report.format_json(None, [], args.all, vault, args.model, error=f"no note matching '{safe_spec}'"))
+        return 1
+
+    cached = load_or_refresh(args, vault, notes, embedder)
+    clusters, shape = cluster_notes(notes, name_index)
+    results = find_similar(
+        target, notes, cached, name_index, args.limit, args.all,
+        clusters=clusters, bridge_first=not args.no_bridge,
+    )
+
+    if args.json:
+        print(ariadne_similar_report.format_json(target, results, args.all, vault, args.model, shape=shape))
+    else:
+        print(
+            ariadne_similar_report.format_text(
+                target, results, len(notes), args.all, vault, shape, grouped=not args.no_bridge
+            )
+        )
+    return 0
+
+
+def split_positional(args):
+    """--index and --duplicates take VAULT; a query takes TARGET VAULT. Returns (target, vault)."""
+    positional = args.positional
+    vault_only = args.index or args.duplicates
+    limit = 1 if vault_only else 2
+    if len(positional) > limit:
+        raise ValueError(f"too many arguments: {' '.join(_printable(a) for a in positional[limit:])}")
+    if vault_only:
+        return None, require_vault(positional[0] if positional else None)
+    if not positional:
+        raise ValueError("a target note is required (or use --index)")
+    return positional[0], require_vault(positional[1] if len(positional) > 1 else None)
+
+
+def check_args(args):
+    if args.limit < 1:
+        raise ValueError(f"--limit must be at least 1, got {args.limit}")
+    if args.max_refresh < 0:
+        raise ValueError(f"--max-refresh cannot be negative, got {args.max_refresh}")
+    if args.rebuild and not args.index:
+        raise ValueError("--rebuild only applies with --index")
+    if args.index and args.duplicates:
+        raise ValueError("--index and --duplicates are separate modes; run them one at a time")
+    # Refused rather than ignored: both shape a single note's result list, and
+    # --duplicates has no target note for them to mean anything about.
+    for flag, on in (("--all", args.all), ("--no-bridge", args.no_bridge)):
+        if on and args.duplicates:
+            raise ValueError(f"{flag} applies to a query, not to --duplicates")
+    ariadne_duplicates.check_arguments(args)
+    ariadne_embed_client.validate_endpoint(args.endpoint, args.allow_remote_endpoint)
+
+
+def main(argv=None):
+    args = parse_args(argv)
+    try:
+        target_spec, vault_spec = split_positional(args)
+        check_args(args)
+    except ValueError as exc:
+        print(f"ariadne-similar: {exc}", file=sys.stderr)
+        return 1
+
+    vault = os.path.abspath(os.path.expanduser(vault_spec))
+    if not os.path.isdir(vault):
+        print(f"ariadne-similar: not a directory: {vault}", file=sys.stderr)
+        return 1
+
+    notes = scan_vault(vault, args.exclude or [])
+    name_index = ariadne_common.build_name_index([n["path"] for n in notes])
+
+    def embedder(texts):
+        return ariadne_embed_client.embed_batch(texts, args.endpoint, args.model)
+
+    try:
+        if args.index:
+            return run_index(args, vault, notes, embedder)
+        if args.duplicates:
+            cached = load_or_refresh(args, vault, notes, embedder)
+            return ariadne_duplicates.run(args, vault, notes, cached)
+        return run_query(args, vault, target_spec, notes, name_index, embedder)
+    except EmbedUnavailable as exc:
+        # Queries degrade to an empty result so the picker always has valid JSON to
+        # parse; --index is an explicit request to do work, so it fails loudly.
+        print(f"ariadne-similar: embeddings unavailable: {exc}", file=sys.stderr)
+        if args.index:
+            return 1
+        if args.json and args.duplicates:
+            ariadne_duplicates.report_unavailable(args, vault, len(notes), str(exc))
+        elif args.json:
+            target = resolve_target(target_spec, notes, name_index)
+            print(ariadne_similar_report.format_json(target, [], args.all, vault, args.model, error=str(exc)))
+        else:
+            print(f"Embeddings unavailable, no results: {exc}")
+        return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

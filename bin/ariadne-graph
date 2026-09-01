@@ -1,0 +1,386 @@
+#!/usr/bin/env python3
+
+"""Report vault structure: orphan/sparse/splittable notes, hubless clusters, recent activity, or neglect."""
+
+import argparse
+import json
+import os
+import sys
+import time
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import ariadne_cluster
+import ariadne_common
+import ariadne_neglected
+import ariadne_splittable
+
+
+def note_entry(path, graph):
+    return {
+        "name": os.path.splitext(os.path.basename(path))[0],
+        "path": path,
+        "degree": len(graph[path]["neighbors"]),
+        "broken_links": sorted(set(graph[path]["broken_links"])),
+    }
+
+
+def classify(graph, min_links):
+    orphans = []
+    sparse = []
+    for path in graph:
+        entry = note_entry(path, graph)
+        if entry["degree"] == 0:
+            orphans.append(entry)
+        elif entry["degree"] < min_links:
+            sparse.append(entry)
+    def sort_key(entry):
+        return (entry["degree"], entry["name"].lower())
+
+    orphans.sort(key=sort_key)
+    sparse.sort(key=sort_key)
+    return orphans, sparse
+
+
+DURATION_UNITS = {"h": 3600, "d": 86400, "w": 604800}
+
+
+def parse_duration(text, flag="--since"):
+    """A duration like 7d, 36h or 2w, as seconds."""
+    raw = str(text).strip().lower()
+    shown = ariadne_common.printable(text)
+    if not raw or raw[-1] not in DURATION_UNITS:
+        raise ValueError(f"{flag} needs a duration like 7d, 36h or 2w, got '{shown}'")
+    try:
+        amount = float(raw[:-1])
+    except ValueError:
+        raise ValueError(f"{flag} needs a number before '{raw[-1]}', got '{shown}'")
+    if amount <= 0:
+        raise ValueError(f"{flag} must be positive, got '{shown}'")
+    return amount * DURATION_UNITS[raw[-1]]
+
+
+def touched_since(files, cutoff):
+    """{path: mtime} for notes modified since cutoff."""
+    return {p: m for p, m in ariadne_common.note_mtimes(files).items() if m >= cutoff}
+
+
+def describe_age(seconds):
+    if seconds < DURATION_UNITS["h"]:
+        return f"{max(int(seconds // 60), 0)}m"
+    if seconds < DURATION_UNITS["d"]:
+        return f"{int(seconds // DURATION_UNITS['h'])}h"
+    return f"{int(seconds // DURATION_UNITS['d'])}d"
+
+
+def activity(graph, labels, recent, vault, now):
+    """Clusters ranked by how many of their notes were touched, plus touched orphans.
+
+    Clusters come from the whole vault, not from the recent notes alone: scoping the
+    graph to a time window would make a note linked from fifty older notes look like
+    an orphan.
+    """
+    sizes = {}
+    for cluster_id in labels.values():
+        sizes[cluster_id] = sizes.get(cluster_id, 0) + 1
+
+    def row(path):
+        entry = note_entry(path, graph)
+        entry["rel"] = os.path.relpath(path, vault)
+        entry["age"] = describe_age(now - recent[path])
+        entry["age_seconds"] = round(now - recent[path])
+        return entry
+
+    grouped = {}
+    orphaned = []
+    for path in sorted(recent, key=lambda p: (-recent[p], p)):
+        entry = row(path)
+        if entry["degree"] == 0:
+            orphaned.append(entry)
+            continue
+        grouped.setdefault(labels[path], []).append(entry)
+
+    clusters = [
+        {"cluster": cid, "size": sizes[cid], "touched": len(notes), "notes": notes}
+        for cid, notes in grouped.items()
+    ]
+    clusters.sort(key=lambda c: (-c["touched"], -c["touched"] / c["size"], c["cluster"]))
+    return clusters, orphaned
+
+
+def format_activity(clusters, orphaned, window, touched, total, vault, shape):
+    lines = [f"Active in the last {window} — {touched} of {total} notes touched in {vault}"]
+    if shape:
+        lines.append(ariadne_cluster.describe_shape(shape))
+    if not touched:
+        lines.append("")
+        lines.append("Nothing touched in that window.")
+        return "\n".join(lines)
+    printable = ariadne_common.printable
+
+    def note_lines(entries):
+        out = []
+        for e in entries:
+            plural = "link" if e["degree"] == 1 else "links"
+            out.append(
+                f"    {printable(e['name'])}  [{e['degree']} {plural}]  "
+                f"{e['age']}  {printable(e['rel'])}"
+            )
+        return out
+
+    for cluster in clusters:
+        lines.append("")
+        lines.append(
+            f"  cluster {cluster['cluster']}   {cluster['touched']} of "
+            f"{cluster['size']} notes touched"
+        )
+        lines += note_lines(cluster["notes"])
+    if orphaned:
+        lines.append("")
+        lines.append(f"  Touched and still orphaned ({len(orphaned)})")
+        lines += note_lines(orphaned)
+    return "\n".join(lines)
+
+
+def format_activity_json(clusters, orphaned, window, touched, total, vault, shape):
+    return json.dumps(
+        {
+            "vault": vault,
+            "window": window,
+            "touched": touched,
+            "total_notes": total,
+            "shape": shape,
+            "active_clusters": clusters,
+            "touched_orphans": orphaned,
+        },
+        indent=2,
+    )
+
+
+def hubless_clusters(neighbors, labels, min_coverage, vault):
+    """Clusters no note links to enough of to serve as their entry point."""
+    hubless = []
+    for entry in ariadne_cluster.cluster_entry_points(neighbors, labels):
+        if entry["coverage"] >= min_coverage:
+            continue
+        path = entry["entry_point"]
+        hubless.append(
+            dict(
+                entry,
+                name=os.path.splitext(os.path.basename(path))[0],
+                rel=os.path.relpath(path, vault),
+            )
+        )
+    return hubless
+
+
+def format_hubless(entries):
+    printable = ariadne_common.printable
+    lines = [f"Clusters without a hub ({len(entries)})"]
+    for e in entries:
+        lines.append(
+            f"  cluster {e['cluster']}  [{e['size']} notes]  "
+            f"no note reaches more than {e['reach']} of the other {e['others']}"
+        )
+        # Named, not ranked: in a ring every member ties, so this is the first of
+        # several equals as often as it is a standout.
+        lines.append(f"      best connected: {printable(e['name'])}  {printable(e['rel'])}")
+    return lines
+
+
+def format_group(title, entries, vault):
+    printable = ariadne_common.printable
+    lines = [f"{title} ({len(entries)})"]
+    for e in entries:
+        rel = printable(os.path.relpath(e["path"], vault))
+        plural = "link" if e["degree"] == 1 else "links"
+        line = f"  {printable(e['name'])}  [{e['degree']} {plural}]  {rel}"
+        if e["broken_links"]:
+            line += "  (broken: " + ", ".join(f"[[{printable(b)}]]" for b in e["broken_links"]) + ")"
+        lines.append(line)
+    return lines
+
+
+def format_text(orphans, sparse, min_links, total, vault, hubless=(), shape=None, splittable=()):
+    if not orphans and not sparse and not hubless and not splittable:
+        return (
+            f"All {total} notes in {vault} have at least {min_links} connection(s), "
+            "every cluster has a hub, and nothing looks like it needs splitting."
+        )
+    lines = [f"Scanned {total} notes in {vault} (sparse threshold: < {min_links} connections)"]
+    if shape:
+        lines.append(ariadne_cluster.describe_shape(shape))
+    if hubless:
+        lines.append("")
+        lines += format_hubless(hubless)
+    if orphans:
+        lines.append("")
+        lines += format_group("Orphans", orphans, vault)
+    if sparse:
+        lines.append("")
+        lines += format_group("Sparse", sparse, vault)
+    if splittable:
+        lines.append("")
+        lines += ariadne_splittable.format_lines(splittable)
+    return "\n".join(lines)
+
+
+def format_json(orphans, sparse, min_links, total, vault, hubless=(), shape=None, splittable=()):
+    return json.dumps(
+        {
+            "vault": vault,
+            "min_links": min_links,
+            "total_notes": total,
+            "shape": shape,
+            "hubless_clusters": list(hubless),
+            "orphans": orphans,
+            "sparse": sparse,
+            "splittable": list(splittable),
+        },
+        indent=2,
+    )
+
+
+def run_activity(args, files, graph, labels, shape, vault, window):
+    now = time.time()
+    recent = touched_since(files, now - window)
+    clusters, orphaned = activity(graph, labels, recent, vault, now)
+    report = format_activity_json if args.json else format_activity
+    print(report(clusters, orphaned, args.since, len(recent), len(files), vault, shape))
+    return 0
+
+
+def run_neglected(args, files, graph, vault, neglect):
+    now = time.time()
+    stale = ariadne_neglected.untouched_before(files, now - neglect)
+    entries, considered = ariadne_neglected.select(
+        graph, stale, args.min_links, args.limit, vault, now
+    )
+    report = ariadne_neglected.format_json if args.json else ariadne_neglected.format_text
+    print(report(entries, considered, args.neglected, len(files), vault))
+    return 0
+
+
+def parse_args(argv):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "vault",
+        nargs="?",
+        default=None,
+        help="Path to the notes vault; required, or set $NOTES_VAULT",
+    )
+    parser.add_argument("-m", "--min-links", type=int, default=3, help="Notes below this connection count are 'sparse' (default: 3)")
+    parser.add_argument(
+        "--hub-reach",
+        type=float,
+        default=0.5,
+        help="A cluster has a hub if one note links to at least this share of it; 0 < value <= 1 (default: 0.5)",
+    )
+    parser.add_argument(
+        "--since",
+        metavar="DURATION",
+        default=None,
+        help="Report recent activity instead of health: notes touched in the last "
+        "7d / 36h / 2w, grouped by cluster",
+    )
+    parser.add_argument(
+        "--neglected",
+        metavar="DURATION",
+        default=None,
+        help="Report well-connected notes untouched for at least 180d / 52w / 8760h, "
+        "best connected first; 'well connected' means at least --min-links connections",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=20,
+        help="Rows to show in the --neglected report; 0 for all (default: 20)",
+    )
+    parser.add_argument(
+        "--min-headers",
+        type=int,
+        default=3,
+        help="A note needs at least this many ##/### sections to be 'splittable' (default: 3)",
+    )
+    parser.add_argument(
+        "--min-words",
+        type=int,
+        default=1200,
+        help="...or at least this many words, for headerless sprawl (default: 1200)",
+    )
+    parser.add_argument(
+        "--max-out-degree",
+        type=int,
+        default=8,
+        help="A note linking out to at least this many others is treated as an index, "
+        "not a split candidate (default: 8)",
+    )
+    parser.add_argument("--json", action="store_true", help="Emit JSON instead of a text report")
+    parser.add_argument(
+        "--exclude",
+        action="append",
+        metavar="GLOB",
+        default=None,
+        help="Glob pattern, relative to vault, to exclude from the scan (repeatable)",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
+    args = parse_args(argv)
+    try:
+        if not 0 < args.hub_reach <= 1:
+            raise ValueError(f"--hub-reach must be above 0 and at most 1, got {args.hub_reach}")
+        if args.limit < 0:
+            raise ValueError(f"--limit cannot be negative, got {args.limit}")
+        if args.min_headers < 1:
+            raise ValueError(f"--min-headers must be at least 1, got {args.min_headers}")
+        if args.min_words < 1:
+            raise ValueError(f"--min-words must be at least 1, got {args.min_words}")
+        if args.max_out_degree < 0:
+            raise ValueError(f"--max-out-degree cannot be negative, got {args.max_out_degree}")
+        if args.since is not None and args.neglected is not None:
+            raise ValueError("--since and --neglected are opposite reports; pass one")
+        window = parse_duration(args.since) if args.since is not None else None
+        neglect = (
+            parse_duration(args.neglected, "--neglected") if args.neglected is not None else None
+        )
+        vault_spec = ariadne_common.require_vault(args.vault)
+    except ValueError as exc:
+        print(f"ariadne-graph: {exc}", file=sys.stderr)
+        return 1
+    vault = os.path.abspath(os.path.expanduser(vault_spec))
+
+    if not os.path.isdir(vault):
+        print(f"ariadne-graph: not a directory: {vault}", file=sys.stderr)
+        return 1
+
+    files = list(ariadne_common.iter_markdown_files(vault, args.exclude or []))
+    name_index = ariadne_common.build_name_index(files)
+    graph = ariadne_cluster.build_graph(files, name_index)
+
+    if neglect is not None:
+        return run_neglected(args, files, graph, vault, neglect)
+
+    orphans, sparse = classify(graph, args.min_links)
+
+    neighbors = ariadne_cluster.adjacency(graph)
+    labels = ariadne_cluster.louvain(neighbors)
+    shape = ariadne_cluster.shape(neighbors, labels)
+
+    if window is not None:
+        return run_activity(args, files, graph, labels, shape, vault, window)
+
+    hubless = hubless_clusters(neighbors, labels, args.hub_reach, vault)
+    splittable = ariadne_splittable.select(
+        files, name_index, args.min_headers, args.min_words, args.max_out_degree, vault
+    )
+
+    if args.json:
+        print(format_json(orphans, sparse, args.min_links, len(files), vault, hubless, shape, splittable))
+    else:
+        print(format_text(orphans, sparse, args.min_links, len(files), vault, hubless, shape, splittable))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

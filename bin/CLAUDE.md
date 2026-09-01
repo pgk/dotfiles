@@ -1,18 +1,18 @@
 # bin/ — notes vault tools
 
-`notes-graph` (including its `--since` and `--neglected` reports),
-`notes-deadlinks` and `notes-similar` all read a whole notes vault. **None of
+`ariadne-graph` (including its `--since` and `--neglected` reports),
+`ariadne-deadlinks` and `ariadne-similar` all read a whole notes vault. **None of
 them has a `~/notes` default**: every invocation must name the vault, as an
 argument or via `$NOTES_VAULT`, and the check runs before the vault is walked so
 a bad invocation costs nothing. The guard is
-`notes_common.require_vault()` — keep it, and don't reintroduce a default in any
+`ariadne_common.require_vault()` — keep it, and don't reintroduce a default in any
 sibling tool.
 
 When developing, testing, or debugging these scripts, never point them at the
-real path — use `../base/nvim/nvim/lua/plugins/obsidian/dev-vault` (a permanent
+real path — use `../base/nvim/nvim/lua/plugins/ariadne/dev-vault` (a permanent
 synthetic fixture) or a `tempfile.TemporaryDirectory()`-built vault instead, as
-`notes-graph_test.py` / `notes-deadlinks_test.py` / `notes-similar_test.py`
-already do. `notes-similar` additionally sends note text to an embedding server,
+`ariadne-graph_test.py` / `ariadne-deadlinks_test.py` / `ariadne-similar_test.py`
+already do. `ariadne-similar` additionally sends note text to an embedding server,
 so a stray run would leak vault content over HTTP as well as print it; it also
 rejects a non-loopback endpoint unless `--allow-remote-endpoint` is passed. Keep
 that guard too.
@@ -21,20 +21,20 @@ The defaults were removed after a session accidentally scanned the real vault
 again: a `for` loop passed `"--index --exclude drafts/*"` as one unsplit zsh
 word, which landed as the *target* and let the vault fall back to `~/notes`.
 Nothing was uploaded (the target failed to resolve first) but all 3,035 notes
-were read. `notes-similar` lost its default then; `notes-graph` and
-`notes-deadlinks` kept theirs until the clustering work, which is when the same
+were read. `ariadne-similar` lost its default then; `ariadne-graph` and
+`ariadne-deadlinks` kept theirs until the clustering work, which is when the same
 hazard was noticed still sitting in both. See
-`../base/nvim/nvim/lua/plugins/obsidian/CLAUDE.md` for the full rule and why
+`../base/nvim/nvim/lua/plugins/ariadne/CLAUDE.md` for the full rule and why
 it exists.
 
-`notes-embed-setup` is the exception: it never touches the vault at all. It only
-ensures `notes-similar`'s Ollama embedding model is pulled, shelling out to
-`ollama list`/`ollama pull` — no `notes_common` import, no vault argument, by
+`ariadne-embed-setup` is the exception: it never touches the vault at all. It only
+ensures `ariadne-similar`'s Ollama embedding model is pulled, shelling out to
+`ollama list`/`ollama pull` — no `ariadne_common` import, no vault argument, by
 design.
 
 ## `--exclude`
 
-`notes_common.matched_excludes()` tests a pattern against a note's relative path
+`ariadne_common.matched_excludes()` tests a pattern against a note's relative path
 **and every directory above it**, case-insensitively. `--exclude journal` therefore
 excludes the whole subtree, and `Journal` matches it too — the vault normally sits on
 a case-insensitive filesystem, where those name the same directory. Excluded
@@ -42,6 +42,34 @@ directories are pruned from the walk, not filtered afterwards, so their contents
 never read. A pattern matching nothing warns on stderr.
 
 Both properties matter beyond ergonomics: `--exclude` is the only mechanism keeping a
-subtree out of `notes-similar`'s HTTP upload, and it previously matched only whole
+subtree out of `ariadne-similar`'s HTTP upload, and it previously matched only whole
 relative paths, case-sensitively — so `--exclude journal` and `--exclude Journal/*`
 each silently excluded nothing.
+
+## `--duplicates`
+
+`ariadne-similar --duplicates` reuses the embedding cache to answer a different
+question from the default query, and needs two signals to answer it:
+`ariadne_duplicates.EMBED_MIN` (0.80 cosine) makes a pair a candidate,
+`TITLE_MIN` (0.85 `difflib` ratio over the names) makes it a duplicate rather
+than a question. Measured elsewhere on a 37-note corpus: the one genuine
+duplicate scored 0.842 cosine / 1.000 title, every other pair over 0.80 cosine
+scored at most 0.430 title. **Don't drop the title signal** — cosine alone
+cannot separate "the same note twice" from "a neighbouring idea", which is the
+job the default query already does.
+
+Both numbers are borrowed calibration, not a measurement of this vault; they
+are flags (`--dup-min`, `--dup-title-min`) so they can be re-tuned here.
+
+The scan is every-pair with no index structure: measured at 9.4 us/pair for the
+768-dim default model, so roughly forty seconds at three thousand notes. That is why it is its own mode. If it ever needs to be faster,
+the honest fix is a blocking key on the title, not an approximate vector index —
+the title is the cheap signal and it is already required.
+
+## What the embeddings are for
+
+`ariadne-similar` answers "find the note I half-remember but cannot name" — and
+`--duplicates` answers "did I write this twice". Both are retrieval. The project
+this was salvaged from spent years using embeddings to *assemble context for
+generation* instead and retired that as never having been the point. If a third
+mode is ever added here, check which of the two jobs it is doing.

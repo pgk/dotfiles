@@ -3,16 +3,16 @@
 ## Context
 
 Third tool in the vault-health family, after [[PLAN-0001-notes-graph-health]]
-(`notes-graph` + `:ObsidianGraphHealth`) and
-[[PLAN-0003-dead-links-detection]] (`notes-deadlinks` + `:ObsidianDeadLinks`).
+(`ariadne-graph` + `:AriadneGraphHealth`) and
+[[PLAN-0003-dead-links-detection]] (`ariadne-deadlinks` + `:AriadneDeadLinks`).
 
-Both existing tools reason about links that **exist**: `notes-graph` finds notes
-with too few, `notes-deadlinks` finds ones pointing nowhere. Neither sees the
+Both existing tools reason about links that **exist**: `ariadne-graph` finds notes
+with too few, `ariadne-deadlinks` finds ones pointing nowhere. Neither sees the
 opposite failure — two notes that belong together and were never linked, because
 nothing in their text overlaps lexically. That decay mode needs meaning, not string
 matching.
 
-`notes-similar` embeds every note once, caches the vectors, ranks the vault against
+`ariadne-similar` embeds every note once, caches the vectors, ranks the vault against
 a target by cosine similarity, then **subtracts the notes already linked** in either
 direction, so every row is a connection that doesn't yet exist.
 
@@ -21,7 +21,7 @@ Decisions made with the user this session:
 - **Embeddings, not a chat model.** The job is retrieval over notes the user wrote;
   a generative model would add a hallucination surface for no gain. This also keeps
   the resident cost at ~0.5 GB instead of ~14 GB on a 24 GB machine.
-- **Stdlib only**, like `notes-graph` and `notes-deadlinks`. `urllib.request` for
+- **Stdlib only**, like `ariadne-graph` and `ariadne-deadlinks`. `urllib.request` for
   HTTP, `array` for vector storage, `math.sumprod` for the dot product. Measured:
   3,035 × 768-dim on Python 3.14 takes **28 ms** — numpy would buy nothing.
 - **OpenAI-compatible `/v1/embeddings`**, defaulting to `http://localhost:11434/v1`
@@ -52,7 +52,7 @@ which changed four things worth recording:
 
 - **The cache could pair one run's `index.json` with another run's `vectors.f32`**
   (both reviewers, independently). The mapping was positional across two separate
-  `os.replace` commits, so an interleaved `:ObsidianSimilarIndex` and picker
+  `os.replace` commits, so an interleaved `:AriadneSimilarIndex` and picker
   refresh could load every note against its neighbour's vector — silently, since
   the hashes still matched. `index.json` now names the generation-stamped vector
   file it was written with (`vectors-<random>.f32`), stale generations are pruned,
@@ -77,21 +77,21 @@ Also from review: `--rebuild` was added, because a same-named model with differe
 dimensions could otherwise deadlock (`--index` was incremental, so the one command
 the error told you to run could not clear the bad cache).
 
-## New script: `bin/notes-similar`
+## New script: `bin/ariadne-similar`
 
-Python 3, executable, no extension — matches `notes-graph` / `notes-deadlinks`.
+Python 3, executable, no extension — matches `ariadne-graph` / `ariadne-deadlinks`.
 Stdlib only (`argparse`, `hashlib`, `json`, `math`, `os`, `sys`), plus
-`notes_common` for vault walking and link parsing.
+`ariadne_common` for vault walking and link parsing.
 
 Split across three files to stay under the 400-line limit, along seams that are
 real rather than arbitrary:
 
-- `bin/notes-similar` — CLI, note text, ranking, output
-- `bin/notes_embed_cache.py` — vectors, the on-disk cache, incremental refresh
-- `bin/notes_embed_client.py` — the HTTP client and endpoint validation; note text
+- `bin/ariadne-similar` — CLI, note text, ranking, output
+- `bin/ariadne_embed_cache.py` — vectors, the on-disk cache, incremental refresh
+- `bin/ariadne_embed_client.py` — the HTTP client and endpoint validation; note text
   leaves the process only through this module, so the egress rules live with it
 
-`notes_common.printable()` is new and shared: `notes-deadlinks` still carries its
+`ariadne_common.printable()` is new and shared: `ariadne-deadlinks` still carries its
 own private copy, which is worth folding in separately.
 
 ### Note text
@@ -106,7 +106,7 @@ does not trigger a re-embed.
 
 ### Cache
 
-`~/.cache/notes-similar/<sha256(vault)[:16]>/` — **never inside the vault**:
+`~/.cache/ariadne-similar/<sha256(vault)[:16]>/` — **never inside the vault**:
 
 - `index.json` — `{model, dims, vectors, notes: [{path, hash}]}`, mode `0600`
 - `vectors-<random>.f32` — raw little-endian float32, `len(notes) * dims` values,
@@ -138,7 +138,7 @@ dropped on the next save, since only current `(path, hash)` pairs are written ba
 4. `find_similar()` — `math.sumprod` of the target vector against every other,
    sorted by descending score then name.
 5. Unless `--all`, drop notes linked to the target in **either** direction:
-   forward links resolved through `notes_common.resolve_link`, backlinks by
+   forward links resolved through `ariadne_common.resolve_link`, backlinks by
    scanning every note's links for one resolving to the target path.
 
 ### Degradation
@@ -163,8 +163,8 @@ Mirrors `deadlinks.lua`, but runs `vim.system` **asynchronously** with a callbac
 rather than `:wait()`: a query may embed up to `--max-refresh` notes over HTTP,
 which can outlast any wait budget worth freezing the editor for (and a kill
 mid-write is exactly what the cache pairing fix defends against).
-`:ObsidianSimilar` on `<leader>oS`, `:ObsidianSimilarIndex[!]` for a refresh or
-rebuild, running `notes-similar <current-file> <vault> --json`.
+`:AriadneSimilar` on `<leader>oS`, `:AriadneSimilarIndex[!]` for a refresh or
+rebuild, running `ariadne-similar <current-file> <vault> --json`.
 
 - Not a markdown buffer in the vault → notify and stop.
 - `available: false` → notify the `error` string at WARN, no picker.
@@ -177,7 +177,7 @@ rebuild, running `notes-similar <current-file> <vault> --json`.
 
 ## Tests
 
-Same harness as `notes-deadlinks_test.py` — `SourceFileLoader`, synthetic vaults
+Same harness as `ariadne-deadlinks_test.py` — `SourceFileLoader`, synthetic vaults
 in `tempfile.TemporaryDirectory()`, never `~/notes`. Subprocess cases also set
 `HOME` to the temp vault, so the `~/notes` default is physically unable to reach
 the real vault from any test, present or future.
@@ -185,12 +185,12 @@ the real vault from any test, present or future.
 No test requires a live embedding server, but the fake must not sit so high that
 the protocol goes unexercised — the review's false-green finding. So:
 
-- `bin/notes_embed_client_test.py` runs the **real HTTP path** against a loopback
+- `bin/ariadne_embed_client_test.py` runs the **real HTTP path** against a loopback
   `http.server` stub, covering the request shape (including that `input` is a
   list, which servers differ on), response reordering, and every failure branch
-- `bin/notes_embed_cache_test.py` covers the cache format, generation pairing,
+- `bin/ariadne_embed_cache_test.py` covers the cache format, generation pairing,
   permissions, and incremental refresh
-- `bin/notes-similar_test.py` covers note text, ranking, link filtering, argument
+- `bin/ariadne-similar_test.py` covers note text, ranking, link filtering, argument
   handling, and the degraded CLI paths with a `fake_embedder` (seeded by `crc32`,
   not `hash()`, so rankings don't depend on `PYTHONHASHSEED`)
 

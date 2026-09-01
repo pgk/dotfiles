@@ -1,0 +1,93 @@
+#!/usr/bin/env python3
+
+"""Ensure the Ollama embedding model ariadne-similar needs is pulled on this machine."""
+
+import argparse
+import os
+import re
+import shutil
+import subprocess
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import ariadne_common
+import ariadne_embed_client
+
+# Anchors --model (CLI or $NOTES_EMBED_MODEL) to a real Ollama model name, not
+# something starting with "-" -- `--model=--insecure` would otherwise hand
+# ollama's own flag parser a flag in the argv slot meant for a model name.
+MODEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*(:[A-Za-z0-9._-]+)?$")
+
+
+def model_present(model):
+    """True if `ollama list` already has `model` exactly, or `model:latest` when
+    `model` carries no tag of its own -- an unqualified name implies :latest, so a
+    differently-tagged pull already present does not satisfy it."""
+    result = subprocess.run(["ollama", "list"], capture_output=True, text=True, timeout=10)
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or "ollama list failed")
+    names = {line.split()[0] for line in result.stdout.splitlines()[1:] if line.strip()}
+    return model in names or (":" not in model and f"{model}:latest" in names)
+
+
+def parse_args(argv):
+    parser = argparse.ArgumentParser(
+        description=__doc__
+        + " Ollama-only: `ollama list`/`ollama pull` aren't part of the "
+        "OpenAI-compatible surface ariadne_embed_client.py targets, so LM Studio / "
+        "llama-server users should pull their model through their own tooling."
+    )
+    parser.add_argument(
+        "--model",
+        default=os.environ.get("NOTES_EMBED_MODEL", ariadne_embed_client.DEFAULT_MODEL),
+        help=f"Model to ensure is pulled (default: $NOTES_EMBED_MODEL or {ariadne_embed_client.DEFAULT_MODEL})",
+    )
+    parser.add_argument("--check", action="store_true", help="Report status only; don't pull")
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
+    args = parse_args(argv)
+    printable = ariadne_common.printable
+
+    if not MODEL_RE.match(args.model):
+        print(f"ariadne-embed-setup: not a valid model name: '{printable(args.model)}'", file=sys.stderr)
+        return 1
+
+    if shutil.which("ollama") is None:
+        print(
+            "ariadne-embed-setup: 'ollama' not found on PATH — install it, or if you're "
+            "using a different OpenAI-compatible server, pull the model through its own tooling",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
+        present = model_present(args.model)
+    except (RuntimeError, OSError, subprocess.TimeoutExpired) as exc:
+        print(f"ariadne-embed-setup: could not query ollama: {printable(exc)}", file=sys.stderr)
+        return 1
+
+    if present:
+        print(f"ariadne-embed-setup: {printable(args.model)} is already pulled")
+        return 0
+
+    if args.check:
+        print(f"ariadne-embed-setup: {printable(args.model)} is missing (run without --check to pull it)")
+        return 1
+
+    print(f"ariadne-embed-setup: pulling {printable(args.model)}...")
+    try:
+        result = subprocess.run(["ollama", "pull", args.model])
+    except OSError as exc:
+        print(f"ariadne-embed-setup: could not run ollama pull: {printable(exc)}", file=sys.stderr)
+        return 1
+    if result.returncode != 0:
+        print(f"ariadne-embed-setup: pull failed (exit {result.returncode})", file=sys.stderr)
+    # A signal-killed child yields a negative returncode; sys.exit() would mangle
+    # that into an unrelated positive status, so collapse it to a plain failure.
+    return result.returncode if result.returncode >= 0 else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

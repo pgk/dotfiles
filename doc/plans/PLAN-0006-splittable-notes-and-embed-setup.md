@@ -25,10 +25,10 @@ an *LLM* doing the judging.
 
 Two deliverables, unrelated in function, both raised this session:
 
-1. `notes-graph --splittable`-equivalent: a third node-level health category,
+1. `ariadne-graph --splittable`-equivalent: a third node-level health category,
    alongside the existing orphans/sparse.
-2. `bin/notes-embed-setup`: prompted by hitting a second machine that runs
-   Ollama but doesn't have `embeddinggemma` pulled yet — `notes-similar` has no
+2. `bin/ariadne-embed-setup`: prompted by hitting a second machine that runs
+   Ollama but doesn't have `embeddinggemma` pulled yet — `ariadne-similar` has no
    way to say "get the model for me."
 
 ## 1. Splittable notes
@@ -49,7 +49,7 @@ candidate = (header_count >= MIN_HEADERS or word_count >= MIN_WORDS)
   words/note; 1200 is ~7x that — a real outlier, not a normal note.
 - **`MAX_OUT_DEGREE = 8`**, as a negative filter: a note linking out to many
   others is plausibly a map-of-content organizing them, not a candidate to be
-  broken up. `notes-graph`'s existing "sparse" threshold is `min_links = 3`
+  broken up. `ariadne-graph`'s existing "sparse" threshold is `min_links = 3`
   (an undirected, symmetrised degree); 8 sits well above that on **out-degree
   specifically** — see below for why the distinction matters. All three are
   new `--min-headers` / `--min-words` / `--max-out-degree` flags, not hardcoded,
@@ -60,32 +60,32 @@ points — e.g. `sections: Background / Approach A / Approach B / Open
 questions`. That's a fact about the note, not a judgment about it, so it's free
 to show.
 
-### Why this needs its own scan, not `notes_cluster.build_graph`
+### Why this needs its own scan, not `ariadne_cluster.build_graph`
 
-`notes_cluster.adjacency_from_links` deliberately builds an **undirected**
+`ariadne_cluster.adjacency_from_links` deliberately builds an **undirected**
 graph (`neighbors[path].add(target); neighbors[target].add(path)` both run),
 which is why every existing `degree` field in this codebase (orphans, sparse,
-`notes_neglected.py`) can't distinguish "links out to 20 others" (an MOC) from
+`ariadne_neglected.py`) can't distinguish "links out to 20 others" (an MOC) from
 "is linked from 20 others" (a popular concept page). Splittable notes need
 outbound count specifically.
 
 Rather than change `build_graph`'s return shape (shared, tested, single
 current caller but still shared infrastructure) or add a directed-degree
-concept to `notes_cluster.py`, `notes_splittable.py` does its own independent
+concept to `ariadne_cluster.py`, `ariadne_splittable.py` does its own independent
 read pass — text, frontmatter-stripped word count, headers, and its own
-link-resolution loop for out-degree — the same way `notes-similar` already
-scans independently rather than reusing `notes-graph`'s pass. Real seam, not
-an arbitrary one: this module's concern is note *text*, `notes_cluster.py`'s
+link-resolution loop for out-degree — the same way `ariadne-similar` already
+scans independently rather than reusing `ariadne-graph`'s pass. Real seam, not
+an arbitrary one: this module's concern is note *text*, `ariadne_cluster.py`'s
 is link *topology*.
 
-Frontmatter stripping currently lives as a private function in `bin/notes-similar`.
-Move it to `notes_common.strip_frontmatter` — shared by both, and worth doing
-regardless (same category as `notes-deadlinks` still carrying its own private
+Frontmatter stripping currently lives as a private function in `bin/ariadne-similar`.
+Move it to `ariadne_common.strip_frontmatter` — shared by both, and worth doing
+regardless (same category as `ariadne-deadlinks` still carrying its own private
 copy of `printable()`, noted as tech debt in PLAN-0004).
 
-### New file: `bin/notes_splittable.py`
+### New file: `bin/ariadne_splittable.py`
 
-Mirrors `notes_neglected.py`'s shape:
+Mirrors `ariadne_neglected.py`'s shape:
 
 ```python
 def note_stats(path, raw, name_index, files_set) -> dict
@@ -99,12 +99,12 @@ def format_text(entries, considered, total, vault, min_headers, min_words, max_o
 def format_json(...) -> str
 ```
 
-`out_degree` resolves each `[[link]]` via `notes_common.resolve_link` and
+`out_degree` resolves each `[[link]]` via `ariadne_common.resolve_link` and
 counts distinct targets in `files` — same resolution/self-exclusion logic
 `adjacency_from_links` uses, just not symmetrised, and duplicated rather than
 extracted for the reason above.
 
-### Wiring into `bin/notes-graph`
+### Wiring into `bin/ariadne-graph`
 
 New flags `--min-headers` (default 3), `--min-words` (default 1200),
 `--max-out-degree` (default 8). Splittable results become a third category in
@@ -114,16 +114,16 @@ those exist because a temporal view would otherwise bury a small result under
 volume; splittable is structural like orphans/sparse and belongs beside them.
 `format_text`/`format_json` gain a `splittable` section/key.
 
-`notes_splittable.select()` takes `files` and `name_index`, which
-`notes-graph`'s `main()` already has before it calls `build_graph` — no
+`ariadne_splittable.select()` takes `files` and `name_index`, which
+`ariadne-graph`'s `main()` already has before it calls `build_graph` — no
 ordering dependency either way.
 
-**Check when implementing:** `notes_cluster_test.py` may assert `build_graph`'s
+**Check when implementing:** `ariadne_cluster_test.py` may assert `build_graph`'s
 exact return shape — irrelevant here since it's untouched, but worth
 confirming nothing else assumes graph-building is the only per-note text read
-in a `notes-graph` invocation.
+in a `ariadne-graph` invocation.
 
-### Neovim: extend `:ObsidianGraphHealth`, no new command
+### Neovim: extend `:AriadneGraphHealth`, no new command
 
 `graph.lua` already renders orphans/sparse/hubless from one JSON payload; add
 a `[SPLIT]`-prefixed section the same way hubless rows are marked
@@ -133,7 +133,7 @@ themselves. Nothing in this feature ever writes to a note.
 
 ### Tests
 
-`notes_splittable_test.py`, same harness as `notes_neglected_test.py`
+`ariadne_splittable_test.py`, same harness as `ariadne_neglected_test.py`
 (`tempfile.TemporaryDirectory()`, never `~/notes`):
 
 - word/header counting, frontmatter stripped first
@@ -147,11 +147,11 @@ themselves. Nothing in this feature ever writes to a note.
 outbound links, would otherwise pass on headers/words alone) to prove the veto
 fires — update its `CLAUDE.md` section when added, per its existing convention.
 
-## 2. `bin/notes-embed-setup`
+## 2. `bin/ariadne-embed-setup`
 
-Ensures the Ollama model `notes-similar` needs is present, pulling it if not.
+Ensures the Ollama model `ariadne-similar` needs is present, pulling it if not.
 Scope is deliberately Ollama-only — `/api/tags` and `/api/pull` aren't part of
-the OpenAI-compatible surface `notes_embed_client.py` targets, so this can't
+the OpenAI-compatible surface `ariadne_embed_client.py` targets, so this can't
 be made server-agnostic the way the embeddings client is. Says so in
 `--help`; LM Studio / `llama-server` users pull models through their own
 tooling.
@@ -162,13 +162,13 @@ inheriting stdio so the pull's own progress output shows normally.
 
 ```python
 #!/usr/bin/env python3
-"""Ensure the Ollama model notes-similar needs is pulled on this machine."""
+"""Ensure the Ollama model ariadne-similar needs is pulled on this machine."""
 
 def model_present(model) -> bool
     # `ollama list`, match name or name:tag
 
 def main(argv=None) -> int
-    # --model (default $NOTES_EMBED_MODEL or notes_embed_client.DEFAULT_MODEL)
+    # --model (default $NOTES_EMBED_MODEL or ariadne_embed_client.DEFAULT_MODEL)
     # --check (report only, don't pull)
     # no `ollama` on PATH -> exit 1, clear message
     # present -> print + exit 0
@@ -177,7 +177,7 @@ def main(argv=None) -> int
 ```
 
 No vault, no note content, no network code of its own — every network access
-happens inside the `ollama` binary, not this script. `notes-embed-setup_test.py`
+happens inside the `ollama` binary, not this script. `ariadne-embed-setup_test.py`
 puts a fake `ollama` shell script on a temp `PATH`, covering: already present,
 missing-and-pulled, missing-and-`--check`, pull fails, `ollama` absent.
 
@@ -189,10 +189,10 @@ the plan above:
 
 - `select()` returns just the candidate list, not `(candidates, considered)`
   — there is no `--limit` here to make "considered vs. shown" meaningful, so
-  the extra return value from the `notes_neglected.py`-style draft was dropped.
+  the extra return value from the `ariadne_neglected.py`-style draft was dropped.
 - `format_text`/`format_json` for splittable rows never became a standalone
-  pair; `notes_splittable.format_lines()` returns picker/report lines that
-  `notes-graph`'s existing formatters splice in, matching `format_hubless`.
+  pair; `ariadne_splittable.format_lines()` returns picker/report lines that
+  `ariadne-graph`'s existing formatters splice in, matching `format_hubless`.
 - **Two real bugs found by review, both in `HEADER_RE`**, caught independently
   by both reviewers converging on the same code: `\s+` crossed a blank header
   line into the next paragraph and counted it as a title; headers inside
@@ -202,12 +202,12 @@ the plan above:
   by the reviewer, who flipped it and found the whole suite (dev-vault
   fixture included) still green. Added a unit boundary test and a dev-vault
   fixture-level test, both confirmed to catch the mutation.
-- `notes-embed-setup`: a differently-tagged model (`embeddinggemma:300m`)
+- `ariadne-embed-setup`: a differently-tagged model (`embeddinggemma:300m`)
   falsely read as "present" when the unqualified default implies `:latest`;
   `--model=--insecure` reached `ollama pull` unvalidated; terminal output
-  wasn't run through `notes_common.printable()`. All three fixed and tested.
-- Added `:ObsidianHelp` (`<leader>oh`) in the same session, unplanned —
-  opens this repo's `obsidian-workflow.md` from a path computed off
+  wasn't run through `ariadne_common.printable()`. All three fixed and tested.
+- Added `:AriadneHelp` (`<leader>oh`) in the same session, unplanned —
+  opens this repo's `ariadne.md` from a path computed off
   `commands.lua`'s own location. Prompted by "should there be a help command,"
   asked after the two tools above were already done.
 

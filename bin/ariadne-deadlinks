@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+
+"""Find dead [[wikilinks]] in a markdown vault, with fuzzy-matched candidate notes."""
+
+import argparse
+import difflib
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import ariadne_common
+
+
+def collect_dead_links(files, name_index):
+    dead_by_file = {}
+    for path in files:
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                text = f.read()
+        except OSError as exc:
+            print(
+                f"warning: skipping unreadable note {ariadne_common.printable(path)}: "
+                f"{ariadne_common.printable(exc)}",
+                file=sys.stderr,
+            )
+            continue
+        dead = {
+            link_text
+            for link_text in ariadne_common.extract_links(text)
+            if ariadne_common.resolve_link(link_text, name_index) is None
+        }
+        if dead:
+            dead_by_file[path] = sorted(dead)
+    return dead_by_file
+
+
+def suggest_candidates(link_text, name_index, limit=3, cutoff=0.5):
+    matches = difflib.get_close_matches(link_text.lower(), name_index.keys(), n=limit, cutoff=cutoff)
+    return [os.path.splitext(os.path.basename(name_index[key]))[0] for key in matches]
+
+
+def build_report(dead_links_by_file, name_index):
+    report = []
+    for path in sorted(dead_links_by_file, key=lambda p: os.path.splitext(os.path.basename(p))[0].lower()):
+        dead_links = [
+            {"link": link, "candidates": suggest_candidates(link, name_index)}
+            for link in dead_links_by_file[path]
+        ]
+        report.append(
+            {
+                "name": os.path.splitext(os.path.basename(path))[0],
+                "path": path,
+                "dead_links": dead_links,
+            }
+        )
+    return report
+
+
+def format_text(report, total, vault):
+    if not report:
+        return f"No dead links found among {total} notes in {vault}."
+    total_dead = sum(len(entry["dead_links"]) for entry in report)
+    dl_plural = "link" if total_dead == 1 else "links"
+    note_plural = "note" if len(report) == 1 else "notes"
+    lines = [
+        f"Scanned {total} notes in {vault} ({total_dead} dead {dl_plural} across {len(report)} {note_plural})",
+        "",
+    ]
+    for entry in report:
+        plural = "link" if len(entry["dead_links"]) == 1 else "links"
+        lines.append(f"{ariadne_common.printable(entry['name'])}  ({len(entry['dead_links'])} dead {plural})")
+        for dl in entry["dead_links"]:
+            link = ariadne_common.printable(dl["link"])
+            if dl["candidates"]:
+                candidates = ", ".join(ariadne_common.printable(c) for c in dl["candidates"])
+                lines.append(f"  [[{link}]]  possible: {candidates}")
+            else:
+                lines.append(f"  [[{link}]]  no matches")
+    return "\n".join(lines)
+
+
+def format_json(report, total, vault):
+    return json.dumps(
+        {
+            "vault": vault,
+            "total_notes": total,
+            "notes_with_dead_links": report,
+        },
+        indent=2,
+    )
+
+
+def parse_args(argv):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "vault",
+        nargs="?",
+        default=None,
+        help="Path to the notes vault; required, or set $NOTES_VAULT",
+    )
+    parser.add_argument("--json", action="store_true", help="Emit JSON instead of a text report")
+    parser.add_argument(
+        "--exclude",
+        action="append",
+        metavar="GLOB",
+        default=None,
+        help="Glob pattern, relative to vault, to exclude from the scan (repeatable)",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
+    args = parse_args(argv)
+    try:
+        vault_spec = ariadne_common.require_vault(args.vault)
+    except ValueError as exc:
+        print(f"ariadne-deadlinks: {exc}", file=sys.stderr)
+        return 1
+    vault = os.path.abspath(os.path.expanduser(vault_spec))
+
+    if not os.path.isdir(vault):
+        print(f"ariadne-deadlinks: not a directory: {vault}", file=sys.stderr)
+        return 1
+
+    files = list(ariadne_common.iter_markdown_files(vault, args.exclude or []))
+    name_index = ariadne_common.build_name_index(files)
+    dead_by_file = collect_dead_links(files, name_index)
+    report = build_report(dead_by_file, name_index)
+
+    if args.json:
+        print(format_json(report, len(files), vault))
+    else:
+        print(format_text(report, len(files), vault))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
