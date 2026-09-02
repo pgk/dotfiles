@@ -82,5 +82,24 @@ the title is the cheap signal and it is already required.
 `ariadne-similar` answers "find the note I half-remember but cannot name" — and
 `--duplicates` answers "did I write this twice". Both are retrieval. The project
 this was salvaged from spent years using embeddings to *assemble context for
-generation* instead and retired that as never having been the point. If a third
-mode is ever added here, check which of the two jobs it is doing.
+generation* instead and retired that as never having been the point. If a
+third mode is ever added here, check which of the two jobs it is doing.
+
+`--search` (a third mode, added later) is the first job, not a new one — "find
+the note I half-remember" with a typed phrase standing in for the note the
+default query anchors on instead. It answers a harder version of the same
+question: with no target note, there is no cluster of its own for a hit to
+cross or stay within, so `--search` groups by cluster rather than ranking
+crossing-vs-within, to keep one tight cluster's hits from burying a good match
+elsewhere in the vault. See `ariadne_search.py`.
+
+## `--search`
+
+`--per-cluster` (default 3) caps hits shown per cluster; `-n`/`--limit`
+(shared with the other modes, default 10) caps how many clusters are shown,
+not hits within one — a third meaning for a flag whose meaning already varies
+by mode (`--duplicates` uses it to cap only the "possible" band). The query
+phrase is embedded fresh on every call and never written to
+`~/.cache/ariadne-similar/` — same boundary `--duplicates` already respects
+by never writing there either, just enforced for a different reason (nothing
+to cache: a typed phrase is rarely repeated verbatim).

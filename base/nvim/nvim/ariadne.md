@@ -30,6 +30,7 @@ it owns the vault plumbing and the `:Obsidian <subcommand>` form.
 | `<leader>oh` | `:AriadneHelp` | Open this doc |
 | `<leader>oD` | `:AriadneDeadLinks` | Find dead links and possible matches |
 | `<leader>oS` | `:AriadneSimilar` | Find semantically similar but unlinked notes |
+| `<leader>oq` | `:AriadneSearch` | Semantic search by phrase, grouped by cluster |
 | `<leader>ou` | `:AriadneDuplicates` | Find duplicate and near-duplicate notes |
 | `<leader>oX` | `:AriadneDelete` | Delete the current note, checking what links to it |
 | `<leader>oB` | `:AriadneBranch` | New note one level deeper (`1a` → `1a1`) |
@@ -72,6 +73,7 @@ it owns the vault plumbing and the `:Obsidian <subcommand>` form.
 | `:AriadneDeadLinks` | Find dead links and possible matches (picker) |
 | `:AriadneSimilar` | Find semantically similar but unlinked notes (picker) |
 | `:AriadneSimilarIndex[!]` | Refresh the embedding index in the background (`!` rebuilds from scratch) |
+| `:AriadneSearch [phrase]` | Semantic search by phrase, grouped by cluster (picker; prompts if no phrase given) |
 | `:AriadneDuplicates [n]` | Find duplicate and near-duplicate notes (picker; `n` caps the "possible" band) |
 | `:AriadneDelete` | Move the current note to `.trash/`, asking first if anything links to it |
 | `:AriadneBranch` | Branch off the current note, one level deeper |
@@ -305,6 +307,29 @@ so it is deliberately noisy and restrictive about it:
 
 **With no embedding server running, nothing breaks:** the command reports that
 embeddings are unavailable and does nothing. The rest of the workflow is unaffected.
+
+## Semantic Search
+
+Use `<leader>oq` or `:AriadneSearch [phrase]` to find notes *about* something
+you can describe but can't name a note for — the same "find the note I
+half-remember" job as `:AriadneSimilar`, except the thing to compare against
+is a typed phrase instead of an existing note. With no argument it prompts;
+`:AriadneSearch database crash recovery` searches immediately.
+
+- Uses the same embedding index as `:AriadneSimilar` — no separate setup, and
+  the same "sending N notes" transparency applies to the phrase itself: every
+  search prints where it was sent before it's sent
+- **Grouped by cluster, not one flat ranked list.** A free-text query has no
+  cluster of its own the way a target note does, so there's no "crossing vs.
+  within" to rank — instead, results are grouped by cluster and each cluster
+  shows its own top matches, so one tight cluster's near-duplicate notes
+  can't bury a good match sitting somewhere else in the vault
+- `--per-cluster` (default 3) caps hits shown per cluster; `-n`/`--limit`
+  (default 10) caps how many clusters are shown
+- Never writes the query's embedding to the cache — computed fresh every
+  time. (Stale *notes* still get topped up first, same as any other query.)
+- Same degradation as everything else here: no embedding server running
+  means an empty result, not an error
 
 ## Duplicates
 

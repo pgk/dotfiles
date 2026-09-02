@@ -81,6 +81,13 @@ the scan itself is every-pair, 48s at 3040 notes — and a warm cache does not
 shorten it.
 Don't fold it into `similar.lua`, and don't make a query pay for it.
 
+`search.lua` / `ariadne-similar --search` is a third question over the same
+index: rank the vault against a typed phrase instead of an existing note,
+grouped by cluster since a free-text query has no cluster of its own for a
+hit to cross or stay within. Its own file for the same reason `duplicates.lua`
+is its own file despite sharing the CLI backend. `:AriadneSearch` accepts an
+argument or prompts for one, same fallback `commands.rename` already uses.
+
 ## Deleting notes
 
 `:AriadneDelete` is the only irreversible-looking command here, so it is a soft
