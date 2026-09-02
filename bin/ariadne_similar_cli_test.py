@@ -57,6 +57,14 @@ class ArgumentTests(unittest.TestCase):
             with self.assertRaises(ValueError, msg=argv):
                 self.split(argv)
 
+    def test_search_with_a_forgotten_phrase_is_refused_rather_than_defaulting(self):
+        # --search's --exclude/--index-shaped hazard: forget the phrase and the
+        # vault path itself becomes the phrase, emptying the positional list.
+        # (A flag-shaped value, e.g. --search --model x, is refused earlier by
+        # argparse itself with "expected one argument" -- verified separately.)
+        with self.assertRaises(ValueError):
+            self.split(["--search", "./some-vault"])
+
     def test_index_accepts_an_explicit_vault(self):
         self.assertEqual(self.split(["--index", "./vault"]), (None, "./vault"))
 
@@ -165,6 +173,43 @@ class CliTests(unittest.TestCase):
         self.assertIn("sending", result.stderr)
         self.assertIn(f"127.0.0.1:{self.port}", result.stderr)
         self.assertIn(self.vault, result.stderr)
+
+    def test_search_without_a_server_exits_zero_with_valid_empty_json(self):
+        result = self.run_cli(["--search", "database crash recovery", self.vault, "--json"])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertFalse(payload["available"])
+        self.assertEqual(payload["groups"], [])
+        self.assertEqual(payload["query"], "database crash recovery")
+        self.assertTrue(payload["error"])
+
+    def test_search_without_a_server_warns_on_stderr(self):
+        result = self.run_cli(["--search", "x", self.vault])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("embeddings unavailable", result.stderr.lower())
+
+    def test_the_search_egress_destination_is_announced_before_any_upload(self):
+        # An empty vault has nothing for load_or_refresh to embed first, isolating
+        # the search-phrase send specifically -- the shared self.vault's notes would
+        # otherwise fail their own embed first and never reach this announce line.
+        with tempfile.TemporaryDirectory() as empty_vault:
+            result = subprocess.run(
+                [
+                    sys.executable, str(SCRIPT_PATH), "--search", "x", empty_vault, "--json",
+                    "--endpoint", f"http://127.0.0.1:{self.port}/v1",
+                ],
+                capture_output=True,
+                text=True,
+                env=dict(os.environ, HOME=self.vault, XDG_CACHE_HOME=self.cache, NOTES_VAULT=""),
+            )
+        self.assertIn("sending your search phrase", result.stderr)
+        self.assertIn(f"127.0.0.1:{self.port}", result.stderr)
+
+    def test_search_without_a_vault_refuses_before_reading_anything(self):
+        result = self.run_cli(["--search", "x"])
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("VAULT path is required", result.stderr)
+        self.assertNotIn("sending", result.stderr)
 
     def test_index_without_a_server_exits_nonzero(self):
         result = self.run_cli(["--index", self.vault])

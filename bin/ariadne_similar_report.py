@@ -103,6 +103,50 @@ def format_duplicates_text(found, total, vault, embed_min, title_min):
     return "\n".join(lines)
 
 
+def _search_hit_lines(r, vault):
+    return [
+        f"  {r['score']:.4f}  {_printable(r['name'])}",
+        f"          {_printable(os.path.relpath(r['path'], vault))}",
+    ]
+
+
+def format_search_text(query, groups, total, vault, shape=None):
+    name = _printable(query)
+    if not groups:
+        return f"No matches for '{name}' among {total} notes in {vault}."
+    hit_count = sum(len(g["hits"]) for g in groups)
+    lines = [f"Search: '{name}' ({hit_count} hit(s) across {len(groups)} cluster(s), {total} notes in {vault})"]
+    if shape:
+        lines.append(ariadne_cluster.describe_shape(shape))
+    for g in groups:
+        lines.append("")
+        label = f"cluster {g['cluster']}" if g["cluster"] is not None else "no cluster"
+        shown = len(g["hits"])
+        count = f"{shown} of {g['cluster_total']}" if shown < g["cluster_total"] else str(shown)
+        lines.append(f"{label} ({count})")
+        for r in g["hits"]:
+            lines += _search_hit_lines(r, vault)
+    return "\n".join(lines)
+
+
+def format_search_json(query, groups, total, vault, model, error=None, shape=None):
+    return json.dumps(
+        {
+            "vault": vault,
+            "model": model,
+            "available": error is None,
+            "error": error,
+            "query": _printable(query) if query is not None else None,
+            "shape": shape,
+            "total_notes": total,
+            "groups": [
+                dict(g, hits=[dict(h, name=_printable(h["name"])) for h in g["hits"]]) for g in groups
+            ],
+        },
+        indent=2,
+    )
+
+
 def format_duplicates_json(
     pairs, total, vault, model, embed_min, title_min, error=None, possible_total=None, duplicate_total=None
 ):

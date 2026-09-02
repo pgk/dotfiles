@@ -14,6 +14,7 @@ import ariadne_common
 import ariadne_duplicates
 import ariadne_embed_cache
 import ariadne_embed_client
+import ariadne_search
 import ariadne_similar_report
 
 EmbedUnavailable = ariadne_embed_cache.EmbedUnavailable
@@ -165,12 +166,13 @@ def parse_args(argv):
         nargs="*",
         metavar="ARG",
         help="TARGET VAULT — note to compare against, by path or name. "
-        "With --index or --duplicates, just VAULT. VAULT may come from $NOTES_VAULT instead",
+        "With --index, --duplicates, or --search, just VAULT. VAULT may come from $NOTES_VAULT instead",
     )
     parser.add_argument("--index", action="store_true", help="Build or refresh the whole embedding index, then exit")
     parser.add_argument("--rebuild", action="store_true", help="With --index, discard the cache and re-embed everything")
     ariadne_duplicates.add_arguments(parser)
-    parser.add_argument("-n", "--limit", type=int, default=10, help="Maximum results per group, so bridge ranking can return up to twice this; one shared limit under --no-bridge. Under --duplicates it caps the 'possible' band only, never the duplicates (default: 10)")
+    ariadne_search.add_arguments(parser)
+    parser.add_argument("-n", "--limit", type=int, default=10, help="Maximum results per group, so bridge ranking can return up to twice this; one shared limit under --no-bridge. Under --duplicates it caps the 'possible' band only, never the duplicates. Under --search it caps clusters shown, not hits within one (see --per-cluster) (default: 10)")
     parser.add_argument("--all", action="store_true", help="Include notes already linked to the target")
     parser.add_argument(
         "--no-bridge",
@@ -282,10 +284,28 @@ def run_query(args, vault, target_spec, notes, name_index, embedder):
     return 0
 
 
+def run_search(args, vault, notes, name_index, embedder):
+    cached = load_or_refresh(args, vault, notes, embedder)
+    clusters, shape = cluster_notes(notes, name_index)
+    print(
+        f"ariadne-similar: sending your search phrase to "
+        f"{ariadne_embed_client.safe_url(args.endpoint)} ({_printable(args.model)})",
+        file=sys.stderr,
+    )
+    query_vec = embedder([args.search])[0]
+    if cached:
+        dims = len(next(iter(cached.values())))
+        if len(query_vec) != dims:
+            raise EmbedUnavailable(
+                f"query embedding is {len(query_vec)} dims but the index is {dims} — re-run with --rebuild"
+            )
+    return ariadne_search.run(args, vault, notes, cached, clusters, shape, query_vec)
+
+
 def split_positional(args):
-    """--index and --duplicates take VAULT; a query takes TARGET VAULT. Returns (target, vault)."""
+    """--index, --duplicates and --search take VAULT; a query takes TARGET VAULT. Returns (target, vault)."""
     positional = args.positional
-    vault_only = args.index or args.duplicates
+    vault_only = args.index or args.duplicates or args.search is not None
     limit = 1 if vault_only else 2
     if len(positional) > limit:
         raise ValueError(f"too many arguments: {' '.join(_printable(a) for a in positional[limit:])}")
@@ -303,14 +323,19 @@ def check_args(args):
         raise ValueError(f"--max-refresh cannot be negative, got {args.max_refresh}")
     if args.rebuild and not args.index:
         raise ValueError("--rebuild only applies with --index")
-    if args.index and args.duplicates:
-        raise ValueError("--index and --duplicates are separate modes; run them one at a time")
+    modes = [("--index", args.index), ("--duplicates", args.duplicates), ("--search", args.search is not None)]
+    active = [name for name, on in modes if on]
+    if len(active) > 1:
+        joined = ", ".join(active[:-1]) + " and " + active[-1]
+        raise ValueError(f"{joined} are separate modes; run them one at a time")
     # Refused rather than ignored: both shape a single note's result list, and
-    # --duplicates has no target note for them to mean anything about.
+    # neither --duplicates nor --search has a target note for them to mean
+    # anything about.
     for flag, on in (("--all", args.all), ("--no-bridge", args.no_bridge)):
-        if on and args.duplicates:
-            raise ValueError(f"{flag} applies to a query, not to --duplicates")
+        if on and (args.duplicates or args.search is not None):
+            raise ValueError(f"{flag} applies to a query, not to --duplicates or --search")
     ariadne_duplicates.check_arguments(args)
+    ariadne_search.check_arguments(args)
     ariadne_embed_client.validate_endpoint(args.endpoint, args.allow_remote_endpoint)
 
 
@@ -340,6 +365,8 @@ def main(argv=None):
         if args.duplicates:
             cached = load_or_refresh(args, vault, notes, embedder)
             return ariadne_duplicates.run(args, vault, notes, cached)
+        if args.search is not None:
+            return run_search(args, vault, notes, name_index, embedder)
         return run_query(args, vault, target_spec, notes, name_index, embedder)
     except EmbedUnavailable as exc:
         # Queries degrade to an empty result so the picker always has valid JSON to
@@ -349,6 +376,8 @@ def main(argv=None):
             return 1
         if args.json and args.duplicates:
             ariadne_duplicates.report_unavailable(args, vault, len(notes), str(exc))
+        elif args.json and args.search is not None:
+            ariadne_search.report_unavailable(args, vault, len(notes), str(exc))
         elif args.json:
             target = resolve_target(target_spec, notes, name_index)
             print(ariadne_similar_report.format_json(target, [], args.all, vault, args.model, error=str(exc)))
