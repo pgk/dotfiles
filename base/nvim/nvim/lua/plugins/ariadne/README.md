@@ -30,6 +30,8 @@ thin Lua layer that wires their `--json` output into fzf-lua pickers.
 | `similar.lua` | Semantically similar but unlinked notes, via a local embedding server (`:AriadneSimilar`) |
 | `duplicates.lua` | Near-duplicate notes, on embedding *and* title similarity (`:AriadneDuplicates`) |
 | `delete.lua` | Move the current note to `.trash/`, gating on what links to it (`:AriadneDelete`) |
+| `branch.lua` | Next note in a Folgezettel sequence (`:AriadneBranch` / `:AriadneSibling`) |
+| `folgezettel.lua` | The id grammar: parse, child, sibling, next free |
 | `wikilinks.lua` | Parsing and rewriting `[[links]]` — resolution keys, display text, unwrapping |
 | `activity.lua` | Recently touched notes, grouped by link community (`:AriadneActive`) |
 

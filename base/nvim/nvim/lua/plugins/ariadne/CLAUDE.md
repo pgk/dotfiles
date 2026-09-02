@@ -130,6 +130,26 @@ touching symlinks), which is what stops `[[../../etc/passwd]]`; a symlinked
 *directory inside* the vault could still be followed out, which is exotic enough
 to be left alone deliberately rather than overlooked.
 
+## Folgezettel ids
+
+`folgezettel.lua` is the whole grammar and is pure: an id alternates digit and
+letter segments starting with digits, a child appends a segment of the other
+kind, a sibling increments the last one. `segments()` rejects anything that is
+not a clean alternation rather than half-parsing it, which is how a note like
+`hub-note` opts out of the scheme — `split()` returning nil is the signal, not
+an error case.
+
+Letters carry bijectively (`z` → `aa`, `zz` → `aaa`), never into a new digit
+segment: the alternation *is* the depth, so a letter segment can only grow
+wider. `first_free` walks by `sibling`, which is the correct step for both
+kinds — the second child of `1a` is `1a2` and the second sibling is `1c`.
+
+`branch.lua` reads taken ids from filenames rather than from any index, so a
+note created outside the editor still reserves its number. The new note is
+written beside its parent and carries a link back to it: the id alone implies
+the relationship, but `ariadne-graph` counts wikilinks, so a branched note with
+no link is an orphan by its measure.
+
 ## Lua tests
 
 `utils_spec.lua` covers `utils.sanitize` and `utils.edit` — the two helpers standing
@@ -162,6 +182,11 @@ bare `or 0` where `graph.lua`'s documented that `vim.NIL` throws.
 `utils_spec.lua` also pins `in_vault` against a real symlinked tempdir vault,
 including the unwritten-buffer case and a sibling directory whose name merely
 starts with the vault path.
+
+`folgezettel_spec.lua` pins the id grammar including every carry;
+`branch_spec.lua` drives both commands against tempdir vaults with the title
+prompt stubbed, covering id allocation, the parent link, the subdirectory
+placement, and each refusal.
 
 `wikilinks_spec.lua` pins the link grammar — resolution keys, display text and
 unwrapping — against the path, anchor, alias and embed forms. `delete_spec.lua`

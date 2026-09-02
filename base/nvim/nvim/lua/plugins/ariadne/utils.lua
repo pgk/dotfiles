@@ -171,20 +171,25 @@ function M.read_note(path)
   return text
 end
 
--- A path for `name` inside the vault, or nil if it would escape.
+-- A path for note `name` under `base` (the vault root by default), or nil if it
+-- would escape `base`.
 --
 -- A different question from `in_vault`, which classifies a path nvim handed us.
--- This one *builds* a path from untrusted text -- a `[[link]]`, or a note name
--- typed at a prompt -- so `[[../../etc/passwd]]` must not resolve. The check is
+-- This one *builds* a path from untrusted text -- a `[[link]]`, or a name typed
+-- at a prompt -- so `[[../../etc/passwd]]` must not resolve. The check is
 -- lexical on purpose: `vim.fs.normalize` collapses `..` without touching
 -- symlinks, and both sides stay unresolved so they compare consistently.
-function M.vault_child(name)
+--
+-- Pass `base` to create a note beside another one. Containment in a `base` that
+-- is itself inside the vault implies containment in the vault, so the caller
+-- only has to have established that once.
+function M.vault_child(name, base)
   if type(name) ~= "string" or name == "" then
     return nil
   end
-  local vault = M.vault_path
-  local path = vim.fs.normalize(vault .. "/" .. name .. ".md")
-  if not vim.startswith(path, vault .. "/") then
+  base = base or M.vault_path
+  local path = vim.fs.normalize(base .. "/" .. name .. ".md")
+  if not vim.startswith(path, base .. "/") then
     return nil
   end
   return path

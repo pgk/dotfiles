@@ -32,6 +32,8 @@ it owns the vault plumbing and the `:Obsidian <subcommand>` form.
 | `<leader>oS` | `:AriadneSimilar` | Find semantically similar but unlinked notes |
 | `<leader>ou` | `:AriadneDuplicates` | Find duplicate and near-duplicate notes |
 | `<leader>oX` | `:AriadneDelete` | Delete the current note, checking what links to it |
+| `<leader>oB` | `:AriadneBranch` | New note one level deeper (`1a` → `1a1`) |
+| `<leader>oN` | `:AriadneSibling` | New note at the same level (`1a` → `1b`) |
 
 ### In Markdown Files
 
@@ -72,6 +74,8 @@ it owns the vault plumbing and the `:Obsidian <subcommand>` form.
 | `:AriadneSimilarIndex[!]` | Refresh the embedding index in the background (`!` rebuilds from scratch) |
 | `:AriadneDuplicates [n]` | Find duplicate and near-duplicate notes (picker; `n` caps the "possible" band) |
 | `:AriadneDelete` | Move the current note to `.trash/`, asking first if anything links to it |
+| `:AriadneBranch` | Branch off the current note, one level deeper |
+| `:AriadneSibling` | Continue the current note's line, at the same level |
 
 ## Links Panel
 
@@ -335,6 +339,38 @@ at three thousand notes — which is why it is its own command and not something
 `:AriadneSimilar` pays for on every query. An up-to-date index does not make it
 quicker; it saves the embedding round trip, not the 4.6M comparisons. It runs
 async, so the editor stays usable while it works.
+
+## Branching a Note
+
+Notes named `1a Some title` are in a **Folgezettel** sequence — Luhmann's
+branching numbers, where the id says where a note sits rather than when it was
+written. An id alternates digits and letters by depth, so `1` → `1a` → `1a1`
+→ `1a1a`, and two commands walk it:
+
+| From `1a Note title` | | |
+|---|---|---|
+| `<leader>oB` | `:AriadneBranch` | `1a1 <your title>` — a branch off this note |
+| `<leader>oN` | `:AriadneSibling` | `1b <your title>` — the same line continuing |
+
+You are prompted for the title only; the id is worked out for you. It is always
+the next **free** one, checked against every note in the vault, so branching off
+`1a` twice gives you `1a1` and then `1a2` rather than a collision. Carries work
+the way Luhmann's did: `1z` → `1aa`, `1a9` → `1a10`.
+
+The new note is created beside its parent — in the same directory, with the
+sequence it belongs to — and opens containing a single line:
+
+```
+Branched from [[1a Note title]]
+```
+
+That link is not decoration. The id *implies* the relationship, but
+`:AriadneGraphHealth` counts wikilinks, so without it every branched note would
+be reported as an orphan. A sibling says `Continues` instead, since it did not
+branch off the note before it. The parent is never modified.
+
+A note outside the scheme — `hub-note`, `2026-09-02` — has no id to branch
+from, and both commands say so and stop rather than inventing one.
 
 ## Deleting a Note
 
