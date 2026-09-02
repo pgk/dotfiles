@@ -174,9 +174,42 @@ gets a "Semantic Search" section matching the existing "Similar Notes" one,
 plus the keybindings/commands tables. `bin/CLAUDE.md` — check whether it lists
 `ariadne-similar`'s modes explicitly; add `--search` if so.
 
+## Built, reviewed, and closed out
+
+Built in the planned order. `code-reviewer` and `security-reviewer` ran in
+parallel per `/done`; both reviewers independently converged on the same two
+real bugs. What changed from the plan above:
+
+- **`rank_by_cluster` gained a width check.** A model or endpoint change
+  behind the same name makes the freshly embedded query vector a different
+  width than the cached note vectors; `math.sumprod` raised a bare
+  `ValueError` instead of the tool's own `EmbedUnavailable` degradation path.
+  Both reviewers reproduced it live. Fixed with an explicit dims check before
+  ranking, raising `EmbedUnavailable` with a `--rebuild` hint, matching what
+  `ariadne_embed_cache.refresh` already does when it embeds something new —
+  this path just never went through it, since a warm cache embeds nothing.
+- **A `run_search()` helper was extracted**, next to `run_query` — not in the
+  original sketch, added because inlining the pipeline in `main()` pushed it
+  to 53 lines (the file's own 50-line function limit), and because the new
+  `CliTests` in `ariadne_search_test.py` turned out to test
+  `ariadne_search.run()` directly rather than `main()`'s actual dispatch to
+  it — mutation-verified: deleting the whole `--search` branch from `main()`
+  left the suite green. Real subprocess-level tests were added to
+  `ariadne_similar_cli_test.py` instead (mirroring the target-query mode's
+  own `CliTests`), and re-running the same mutation now fails them.
+- **Picker rows are ordinal-keyed**, `i .. "\t" .. describe(...)` with
+  `--delimiter`/`--with-nth`, not `path_by_line[line]` as first written —
+  `duplicates.lua` had already abandoned text-keyed rows for exactly the
+  collision risk this plan reintroduced; matched here for consistency.
+- The picker header gained the `cli.header_for(shape)` suffix this plan said
+  it would keep ("reused as-is") but the first pass omitted — the one place
+  results are organized entirely around clusters is also the one place the
+  cluster-shape caveat matters most.
+- `M.search()` gained a client-side blank-phrase guard
+  (`vim.trim(phrase) == ""`), matching `duplicates.lua`'s existing reasoning:
+  a CLI-side refusal reaches the user as an opaque one-line "failed:"
+  notification instead of a quiet no-op.
+
 ## Next action
 
-Build order: `ariadne_search.py` + its tests first (pure logic, no CLI/Lua
-dependency), then wire into `ariadne-similar`, then `search.lua` +
-`init.lua`. `/done` (code + security review) before calling it finished, same
-as PLAN-0006.
+Nothing queued.
