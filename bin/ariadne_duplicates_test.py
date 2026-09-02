@@ -17,22 +17,10 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ariadne_duplicates
 import ariadne_similar_report
-from ariadne_similar_testkit import ariadne_similar, fake_embedder, write_vault
+from ariadne_similar_testkit import ariadne_similar, fake_embedder, notes_and_cache, write_vault
 
 SAME_IDEA = "Agents satisfice rather than optimise, because search costs time.\n"
 OTHER_IDEA = "Silt fills the channel and the dredger clears it every spring.\n"
-
-
-def notes_and_cache(files):
-    """(notes, cached) for a vault built from `files`, fully embedded."""
-    with tempfile.TemporaryDirectory() as root:
-        write_vault(root, files)
-        notes = ariadne_similar.scan_vault(root, [])
-    cached = {}
-    embed = fake_embedder(dims=64)
-    for note, vector in zip(notes, embed([n["text"] for n in notes])):
-        cached[(note["path"], note["hash"])] = vector
-    return notes, cached
 
 
 class TitleSimilarityTests(unittest.TestCase):
