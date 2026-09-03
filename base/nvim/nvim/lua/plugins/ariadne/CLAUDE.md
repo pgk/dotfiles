@@ -57,36 +57,25 @@ puts the current note before the vault, and reports its own `error` field. Don't
 seeds `math.random` once at load from `hrtime()` — `os.time()` has one-second
 resolution, so two commands run in the same second replayed the same draw.
 
-## What `ariadne-similar` embeds
+## Why similar/duplicates/search are separate Lua files
 
-`note_text()` embeds the note *name* followed by the body, with every
-`[[wikilink]]` flattened to the words a reader sees
-(`ariadne_common.wikilink_display`). Both matter: body-only embeddings made
-short notes with descriptive titles hard to retrieve, and an unflattened link is
-punctuation and a slug where the reader sees two words of meaning. Changing
-either changes every note's content hash, so it forces a full re-index — the
-`--max-refresh` guard turns that into an honest "run --index" message rather
-than a silent multi-minute upload, which is the behaviour to keep.
+Three commands share the `ariadne-similar` CLI backend and one embedding
+index, but each gets its own Lua file rather than branching inside
+`similar.lua`. The *why* behind what each mode actually does — the embedded
+text, the duplicate thresholds, the cluster grouping, the scan-time numbers —
+lives in `bin/CLAUDE.md`, next to the Python that implements it; this section
+only covers the Lua-side reason for the file boundary:
 
-`duplicates.lua` / `ariadne-similar --duplicates` is a second question over the
-same index, and it needs the **title** signal as well as the embedding one. The
-numbers and the reasoning live in `bin/CLAUDE.md`; the short version is that
-cosine alone cannot separate "the same note twice" from "a neighbouring idea",
-and the latter is what `:AriadneSimilar` already reports. Both thresholds are
-borrowed calibration from another vault, so treat a bad hit rate as a reason to
-re-tune `--dup-min` / `--dup-title-min`, not as a bug.
-
-The picker is async for a second reason beyond the embedding round trip:
-the scan itself is every-pair, 48s at 3040 notes — and a warm cache does not
-shorten it.
-Don't fold it into `similar.lua`, and don't make a query pay for it.
-
-`search.lua` / `ariadne-similar --search` is a third question over the same
-index: rank the vault against a typed phrase instead of an existing note,
-grouped by cluster since a free-text query has no cluster of its own for a
-hit to cross or stay within. Its own file for the same reason `duplicates.lua`
-is its own file despite sharing the CLI backend. `:AriadneSearch` accepts an
-argument or prompts for one, same fallback `commands.rename` already uses.
+- `duplicates.lua` is async for a reason beyond the embedding round trip: its
+  scan is every-pair and a warm cache does not shorten it (numbers in
+  `bin/CLAUDE.md`). Don't fold it into `similar.lua`, and don't make a query
+  pay for it.
+- `search.lua` accepts an argument or prompts for one, the same fallback
+  `commands.rename` already uses.
+- Both mirror `similar.lua`'s async pattern (`vim.system`, never `:wait()`)
+  and both go through `cli.lua`'s shared `decode`/`header_for`/`relative`
+  rather than `utils.run_ariadne_tool` — see "Talking to the CLI tools" above
+  for why `similar.lua` opts out of that helper, which applies here too.
 
 ## Deleting notes
 
@@ -139,23 +128,20 @@ to be left alone deliberately rather than overlooked.
 
 ## Folgezettel ids
 
-`folgezettel.lua` is the whole grammar and is pure: an id alternates digit and
-letter segments starting with digits, a child appends a segment of the other
-kind, a sibling increments the last one. `segments()` rejects anything that is
-not a clean alternation rather than half-parsing it, which is how a note like
-`hub-note` opts out of the scheme — `split()` returning nil is the signal, not
-an error case.
+`folgezettel.lua` is the whole grammar (pure; `folgezettel_spec.lua` pins
+every case, including the carries — read there for the mechanics, not here).
+Two decisions worth knowing before touching it:
 
-Letters carry bijectively (`z` → `aa`, `zz` → `aaa`), never into a new digit
-segment: the alternation *is* the depth, so a letter segment can only grow
-wider. `first_free` walks by `sibling`, which is the correct step for both
-kinds — the second child of `1a` is `1a2` and the second sibling is `1c`.
-
-`branch.lua` reads taken ids from filenames rather than from any index, so a
-note created outside the editor still reserves its number. The new note is
-written beside its parent and carries a link back to it: the id alone implies
-the relationship, but `ariadne-graph` counts wikilinks, so a branched note with
-no link is an orphan by its measure.
+- `segments()` **rejects** anything that is not a clean digit/letter
+  alternation, rather than half-parsing it — that refusal is how a note like
+  `hub-note` opts out of the scheme (`split()` returning `nil` is the signal,
+  not an error case). Letters never carry into a new digit segment, because
+  the alternation *is* the depth; "fixing" that would break it.
+- `branch.lua` reads taken ids from filenames rather than from any index, so
+  a note created outside the editor still reserves its number — but the new
+  note's link back to its parent is the only thing telling `ariadne-graph`
+  they are related. A branched note with no link is an orphan by that
+  measure, the id alone does not count.
 
 ## Lua tests
 

@@ -19,6 +19,7 @@ thin Lua layer that wires their `--json` output into fzf-lua pickers.
 |---|---|
 | `init.lua` | Plugin spec — loads obsidian.nvim, wires up every module below, global keymaps |
 | `utils.lua` | Shared helpers: vault path, safe `edit`/`write`, `sanitize`, `sample`, `run_ariadne_tool` |
+| `cli.lua` | Shared by `similar.lua`/`duplicates.lua`/`search.lua`: payload decoding, picker header, vault-relative path |
 | `commands.lua` | Misc commands: random note, insert link, rename, extract-to-note, help |
 | `daily.lua` | Daily note template — on-this-day, neglected, and review sections |
 | `anniversary.lua` | Date logic behind the "on this day" section |
@@ -28,6 +29,7 @@ thin Lua layer that wires their `--json` output into fzf-lua pickers.
 | `graph.lua` | Orphan/sparse/splittable notes and hubless clusters (`:AriadneGraphHealth`) |
 | `deadlinks.lua` | Dead `[[links]]` with fuzzy-matched candidates (`:AriadneDeadLinks`) |
 | `similar.lua` | Semantically similar but unlinked notes, via a local embedding server (`:AriadneSimilar`) |
+| `search.lua` | Semantic search by phrase, grouped by cluster (`:AriadneSearch`) |
 | `duplicates.lua` | Near-duplicate notes, on embedding *and* title similarity (`:AriadneDuplicates`) |
 | `delete.lua` | Move the current note to `.trash/`, gating on what links to it (`:AriadneDelete`) |
 | `branch.lua` | Next note in a Folgezettel sequence (`:AriadneBranch` / `:AriadneSibling`) |

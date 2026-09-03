@@ -32,6 +32,17 @@ ensures `ariadne-similar`'s Ollama embedding model is pulled, shelling out to
 `ollama list`/`ollama pull` — no `ariadne_common` import, no vault argument, by
 design.
 
+## What gets embedded
+
+`ariadne-similar`'s `note_text()` embeds the note *name* followed by the
+body, with every `[[wikilink]]` flattened to the words a reader sees
+(`ariadne_common.wikilink_display`). Both matter: body-only embeddings made
+short notes with descriptive titles hard to retrieve, and an unflattened link
+is punctuation and a slug where the reader sees two words of meaning.
+Changing either changes every note's content hash, forcing a full re-index —
+the `--max-refresh` guard turns that into an honest "run --index" message
+rather than a silent multi-minute upload, which is the behaviour to keep.
+
 ## `--exclude`
 
 `ariadne_common.matched_excludes()` tests a pattern against a note's relative path
