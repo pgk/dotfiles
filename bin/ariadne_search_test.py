@@ -80,6 +80,45 @@ class RankByClusterTests(unittest.TestCase):
         self.assertEqual(hit_names, {notes[1]["name"]})
 
 
+class QueryPrefixTests(unittest.TestCase):
+    """EmbeddingGemma is trained asymmetrically; a query is not a document."""
+
+    def test_the_phrase_is_wrapped_in_the_models_query_prefix(self):
+        self.assertEqual(
+            ariadne_search.query_text("crash recovery"), "task: search result | query: crash recovery"
+        )
+
+    def test_run_search_embeds_the_prefixed_phrase_not_the_raw_one(self):
+        with tempfile.TemporaryDirectory() as root, tempfile.TemporaryDirectory() as cache:
+            write_vault(root, {"db.md": DATABASES})
+            args = ariadne_similar.parse_args(["--search", "crash recovery", root])
+            notes = ariadne_similar.scan_vault(root, [])
+            name_index = ariadne_common.build_name_index([n["path"] for n in notes])
+            calls = []
+            with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": cache}):
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    ariadne_similar.run_search(
+                        args, root, notes, name_index, fake_embedder(calls=calls)
+                    )
+            self.assertIn(ariadne_search.query_text("crash recovery"), calls)
+            self.assertNotIn("crash recovery", calls)
+
+    def test_the_prefix_is_never_written_to_the_note_index(self):
+        """The phrase is a query, not vault content -- it must not reach the cache."""
+        with tempfile.TemporaryDirectory() as root, tempfile.TemporaryDirectory() as cache:
+            write_vault(root, {"db.md": DATABASES})
+            args = ariadne_similar.parse_args(["--search", "crash recovery", root])
+            notes = ariadne_similar.scan_vault(root, [])
+            name_index = ariadne_common.build_name_index([n["path"] for n in notes])
+            with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": cache}):
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    ariadne_similar.run_search(args, root, notes, name_index, fake_embedder())
+                    cached, _ = ariadne_embed_cache.load_cache(
+                        ariadne_embed_cache.cache_dir(root), args.model
+                    )
+            self.assertEqual(set(cached), {(notes[0]["path"], notes[0]["hash"])})
+
+
 class WholeNoteScoringTests(unittest.TestCase):
     """A phrase has no sections, so each note is scored as one vector: its centroid."""
 

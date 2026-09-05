@@ -273,7 +273,7 @@ def run_search(args, vault, notes, name_index, embedder):
         f"{ariadne_embed_client.safe_url(args.endpoint)} ({_printable(args.model)})",
         file=sys.stderr,
     )
-    query_vec = embedder([args.search])[0]
+    query_vec = embedder([ariadne_search.query_text(args.search)])[0]
     if cached:
         dims = ariadne_embed_cache.dims_of(cached)
         if len(query_vec) != dims:

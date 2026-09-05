@@ -14,6 +14,16 @@ import ariadne_embed_cache
 import ariadne_similar_report
 
 DEFAULT_PER_CLUSTER = 3
+# EmbeddingGemma is trained asymmetrically: a retrieval query is meant to arrive
+# under this prefix, documents under their own. Prefixing the query alone is
+# worth +1.5% MRR (24 queries better, 9 worse) on a 495-note public corpus, and
+# costs no re-index -- the query is embedded fresh per call and never cached.
+QUERY_PREFIX = "task: search result | query: "
+
+
+def query_text(phrase):
+    """The search phrase as the model expects a query, not a document."""
+    return f"{QUERY_PREFIX}{phrase}"
 
 
 def rank_by_cluster(query_vec, notes, cached, clusters, *, per_cluster, limit):
