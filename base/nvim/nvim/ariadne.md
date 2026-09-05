@@ -31,6 +31,7 @@ it owns the vault plumbing and the `:Obsidian <subcommand>` form.
 | `<leader>oD` | `:AriadneDeadLinks` | Find dead links and possible matches |
 | `<leader>oS` | `:AriadneSimilar` | Find semantically similar but unlinked notes |
 | `<leader>oq` | `:AriadneSearch` | Semantic search by phrase, grouped by cluster |
+| `<leader>oQ` | `:AriadneSearchSelection` | (visual) Find notes similar to the selected passage |
 | `<leader>ou` | `:AriadneDuplicates` | Find duplicate and near-duplicate notes |
 | `<leader>oX` | `:AriadneDelete` | Delete the current note, checking what links to it |
 | `<leader>oB` | `:AriadneBranch` | New note one level deeper (`1a` → `1a1`) |
@@ -74,6 +75,7 @@ it owns the vault plumbing and the `:Obsidian <subcommand>` form.
 | `:AriadneSimilar` | Find semantically similar but unlinked notes (picker) |
 | `:AriadneSimilarIndex[!]` | Refresh the embedding index in the background (`!` rebuilds from scratch) |
 | `:AriadneSearch [phrase]` | Semantic search by phrase, grouped by cluster (picker; prompts if no phrase given) |
+| `:AriadneSearchSelection` | Find notes similar to the visual selection, ranked as `:AriadneSimilar` is (picker) |
 | `:AriadneDuplicates [n]` | Find duplicate and near-duplicate notes (picker; `n` caps the "possible" band) |
 | `:AriadneDelete` | Move the current note to `.trash/`, asking first if anything links to it |
 | `:AriadneBranch` | Branch off the current note, one level deeper |
@@ -321,6 +323,40 @@ so it is deliberately noisy and restrictive about it:
 
 **With no embedding server running, nothing breaks:** the command reports that
 embeddings are unavailable and does nothing. The rest of the workflow is unaffected.
+
+## Similar to a Selection
+
+Select a paragraph in visual mode and press `<leader>oQ` (or run
+`:'<,'>AriadneSearchSelection`) to find notes about *that passage* rather than
+about the whole note you are sitting in.
+
+This is the answer to a note that is not about one thing. `:AriadneSimilar`
+compares whole notes, so a note carrying several ideas — or a daily note whose
+opening `Previous #daily-note was: [[…]]` line is a large fraction of its text —
+gets compared on the average of all of it. On daily-note-shaped notes that
+shared opening line alone lifts pairwise similarity by +0.09 to +0.12. Selecting
+the paragraph you mean sidesteps it: the query becomes the idea, not the note
+that happens to contain it.
+
+- **Ranked like `:AriadneSimilar`, not like `:AriadneSearch`.** The passage has
+  no cluster of its own, but the note you lifted it from does — so the results
+  keep the crossing-vs-within split, the `[linked]` marks, and `ctrl-y` to
+  insert a wikilink to the highlighted note. The note you selected in is left
+  out of its own results.
+- **A long selection is not truncated.** It is split at its own `##` headings
+  and windowed, then scored on whichever piece matches best — so selecting a
+  whole multi-section chunk works, up to about 10,000 characters.
+- **The note's title rides along with the passage, unless it's a date.** Sending
+  the title with the passage matches how notes are stored in the index and
+  measurably improves results — except when the title says nothing, which is
+  precisely the daily-note case. A `2026-09-05` title measurably *hurts*, and
+  date strings are very similar to one another, so a title with no words in it
+  is left off. Nothing to configure; it just does the right thing for daily
+  notes and for `1a2b Some Title` alike.
+- **The passage is shown in the picker header**, so you can tell which selection
+  an async result belongs to.
+- Uses the same embedding index as `:AriadneSimilar`; the selection itself is
+  embedded fresh and never written to the cache.
 
 ## Semantic Search
 

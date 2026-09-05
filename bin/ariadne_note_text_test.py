@@ -187,6 +187,107 @@ class NoteChunksTests(unittest.TestCase):
         self.assertEqual(ariadne_note_text.note_chunks("n", "---\ntitle: X\n---\n"), ["n"])
 
 
+class PassageChunksTests(unittest.TestCase):
+    """A lifted selection, chunked as a query rather than stored as a note."""
+
+    def test_a_short_passage_stays_one_chunk_and_is_unchanged(self):
+        self.assertEqual(ariadne_note_text.passage_chunks("one idea, briefly put"),
+                         ["one idea, briefly put"])
+
+    def test_surrounding_whitespace_is_dropped(self):
+        """A visual selection routinely carries a trailing newline."""
+        self.assertEqual(ariadne_note_text.passage_chunks("  an idea\n\n"), ["an idea"])
+
+    def test_with_no_name_nothing_is_prefixed(self):
+        body = "the idea itself"
+        self.assertEqual(ariadne_note_text.passage_chunks(body), [body])
+
+    def test_a_name_that_carries_words_is_prefixed_as_a_stored_chunk_would_be(self):
+        """Matching how documents are stored is the whole reason it helps.
+
+        The body carries a wikilink on purpose: without one this asserted a broad
+        equivalence while only exercising the single case where the two agree."""
+        body = "the idea itself, see [[Working Memory|memory]]"
+        self.assertEqual(
+            ariadne_note_text.passage_chunks(body, "Working Memory"),
+            ariadne_note_text.note_chunks("Working Memory", body),
+        )
+
+    def test_a_date_shaped_name_is_left_off(self):
+        """The case this is conditional for: a daily note's title says nothing,
+        and prefixing it measurably costs accuracy rather than merely not helping."""
+        body = "the idea itself"
+        self.assertEqual(ariadne_note_text.passage_chunks(body, "2026-09-05"), [body])
+
+    def test_a_bare_folgezettel_id_is_left_off(self):
+        body = "the idea itself"
+        self.assertEqual(ariadne_note_text.passage_chunks(body, "1a2b"), [body])
+
+    def test_informative_name_splits_words_from_dates_and_ids(self):
+        for name in ("Working Memory", "db", "2026-09-05 Monday", "작업 기억", "a-note"):
+            with self.subTest(name=name):
+                self.assertTrue(ariadne_note_text.informative_name(name))
+        for name in ("2026-09-05", "20260905", "1a2b", "", "12.3.4", "0081", None):
+            with self.subTest(name=name):
+                self.assertFalse(ariadne_note_text.informative_name(name))
+
+    def test_every_chunk_of_a_long_passage_carries_the_name(self):
+        """`note_chunks` puts the name on every chunk, and the query is scored on
+        whichever chunk matches best -- so one bare chunk would be shape-mismatched."""
+        chunks = ariadne_note_text.passage_chunks("word " * 900, "Working Memory")
+        self.assertGreater(len(chunks), 1)
+        self.assertTrue(all(c.startswith("Working Memory\n\n") for c in chunks))
+
+    def test_a_long_passage_is_split_rather_than_truncated(self):
+        text = "word " * 900  # 4500 chars, well past CHUNK_THRESHOLD
+        chunks = ariadne_note_text.passage_chunks(text)
+        self.assertGreater(len(chunks), 1)
+        # Nothing is lost off the end: the tail survives into the last chunk.
+        self.assertTrue(chunks[-1].endswith("word"))
+
+    def test_a_passage_is_cut_at_its_own_headings(self):
+        first, second = "alpha " * 260, "beta " * 260
+        chunks = ariadne_note_text.passage_chunks(f"## One\n\n{first}\n\n## Two\n\n{second}")
+        self.assertTrue(chunks[0].startswith("## One"))
+        self.assertTrue(any(c.startswith("## Two") for c in chunks))
+
+    def test_the_chunk_count_is_capped_for_a_query(self):
+        """Unbounded chunks would mean an unbounded query, not just a big note."""
+        chunks = ariadne_note_text.passage_chunks("word " * 20000)
+        self.assertEqual(len(chunks), ariadne_note_text.MAX_QUERY_CHUNKS)
+
+    def test_a_passage_just_over_the_cap_in_sections_is_packed_not_truncated(self):
+        """The boundary of the bug above: MAX_QUERY_CHUNKS + 1 sections."""
+        n = ariadne_note_text.MAX_QUERY_CHUNKS + 1
+        text = "".join(f"## S{i}\n\n{'filler words ' * 8}\n\n" for i in range(n))
+        self.assertIn(f"S{n - 1}", " ".join(ariadne_note_text.passage_chunks(text)))
+
+    def test_a_heading_dense_passage_keeps_its_tail(self):
+        """The cap is 8 while note_chunks' gate is 32, so sections must be packed
+        against THIS cap -- otherwise a selection of 9 to 32 short sections had
+        everything past the eighth silently dropped."""
+        text = "".join(f"## Section {i}\n\n{'body words here ' * 7}\n\n" for i in range(20))
+        chunks = ariadne_note_text.passage_chunks(text)
+        self.assertLessEqual(len(chunks), ariadne_note_text.MAX_QUERY_CHUNKS)
+        self.assertIn("Section 19", " ".join(chunks))
+        kept = sum(len(c) for c in chunks)
+        self.assertGreater(kept, 0.95 * len(text))
+
+    def test_a_passage_is_normalized_the_way_a_document_is(self):
+        """Documents are indexed with wikilinks flattened; a query embedding the
+        raw brackets would be scored against an index that has none."""
+        body = "Mulch holds moisture, see [[Working Memory|memory]]."
+        self.assertEqual(
+            ariadne_note_text.passage_chunks(body, "Garden Log"),
+            ariadne_note_text.note_chunks("Garden Log", body),
+        )
+        self.assertNotIn("[[", ariadne_note_text.passage_chunks(body)[0])
+
+    def test_frontmatter_lifted_with_a_selection_is_dropped(self):
+        text = "---\ntags: [a]\n---\n\nthe idea itself"
+        self.assertEqual(ariadne_note_text.passage_chunks(text), ["the idea itself"])
+
+
 class SectionCapTests(unittest.TestCase):
     """A note that is a list of short headings must not become one vector each."""
 

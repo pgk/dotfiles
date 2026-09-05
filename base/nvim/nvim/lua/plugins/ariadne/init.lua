@@ -87,11 +87,21 @@ return {
     vim.keymap.set("n", "<leader>of", "<cmd>Obsidian links<cr>", { desc = "Ariadne forward links (picker)" })
     vim.keymap.set("n", "<leader>ot", "<cmd>AriadneTransclusionToggle<cr>", { desc = "Ariadne toggle transclusions" })
     vim.keymap.set("n", "<leader>oR", "<cmd>AriadneRename<cr>", { desc = "Ariadne rename note" })
-    vim.keymap.set("v", "<leader>oe", "<cmd>AriadneExtract<cr>", { desc = "Ariadne extract to note" })
+    -- Same `:<C-u>` reason as <leader>oQ below. This one is a pre-existing bug:
+    -- as a `<cmd>` mapping it extracted the previously selected text into the
+    -- new note, and refused outright on a buffer's first selection.
+    vim.keymap.set("v", "<leader>oe", ":<C-u>AriadneExtract<cr>", { desc = "Ariadne extract to note" })
     vim.keymap.set("n", "<leader>og", "<cmd>AriadneGraphHealth<cr>", { desc = "Ariadne orphan/sparse/splittable notes" })
     vim.keymap.set("n", "<leader>oD", "<cmd>AriadneDeadLinks<cr>", { desc = "Ariadne dead links" })
     vim.keymap.set("n", "<leader>oS", "<cmd>AriadneSimilar<cr>", { desc = "Ariadne similar unlinked notes" })
     vim.keymap.set("n", "<leader>oq", "<cmd>AriadneSearch<cr>", { desc = "Ariadne semantic search" })
+    -- `:<C-u>` and not `<cmd>`: `<cmd>` does not leave Visual mode, and nvim only
+    -- writes the '< / '> marks on exit from it -- so a `<cmd>` mapping reads the
+    -- PREVIOUS selection, and reads nothing at all the first time a buffer is
+    -- selected in. Verified: with line 2 selected, a `<cmd>`-fired command sees
+    -- line 1. The `<C-u>` clears the '<,'> range nvim inserts for us, which this
+    -- command does not use -- it reads the marks itself, to keep the columns.
+    vim.keymap.set("v", "<leader>oQ", ":<C-u>AriadneSearchSelection<cr>", { desc = "Ariadne similar to selection" })
     vim.keymap.set("n", "<leader>oB", "<cmd>AriadneBranch<cr>", { desc = "Ariadne branch note (1a -> 1a1)" })
     vim.keymap.set("n", "<leader>oN", "<cmd>AriadneSibling<cr>", { desc = "Ariadne sibling note (1a -> 1b)" })
     vim.keymap.set("n", "<leader>ou", "<cmd>AriadneDuplicates<cr>", { desc = "Ariadne duplicate notes" })

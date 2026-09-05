@@ -13,13 +13,19 @@ import ariadne_common
 _printable = ariadne_common.printable
 
 
-def format_text(target, results, total, include_linked, vault, shape=None, grouped=False):
+def format_text(target, results, total, include_linked, vault, shape=None, grouped=False, passage=None):
+    """`passage` names the case where the query was text lifted out of `target`.
+
+    Worth the extra word in the header: the results answer a paragraph, not the
+    note, and "Similar to 'Daily 2026-09-05'" would claim otherwise.
+    """
     name = _printable(target["name"])
+    whose = f"a passage from '{name}'" if passage is not None else f"'{name}'"
     if not results:
         scope = "similar" if include_linked else "unlinked similar"
-        return f"No {scope} notes found for '{name}' among {total} notes in {vault}."
+        return f"No {scope} notes found for {whose} among {total} notes in {vault}."
     scope = "Similar" if include_linked else "Unlinked similar"
-    lines = [f"{scope} to '{name}' ({len(results)} of {total} notes in {vault})"]
+    lines = [f"{scope} to {whose} ({len(results)} of {total} notes in {vault})"]
     if shape:
         lines.append(ariadne_cluster.describe_shape(shape))
     for title, rows in (_grouped(results) if grouped else [(None, results)]):
@@ -55,7 +61,7 @@ def _result_lines(r, vault):
     return lines
 
 
-def format_json(target, results, include_linked, vault, model, error=None, shape=None):
+def format_json(target, results, include_linked, vault, model, error=None, shape=None, passage=None):
     return json.dumps(
         {
             "vault": vault,
@@ -65,6 +71,9 @@ def format_json(target, results, include_linked, vault, model, error=None, shape
             "unlinked_only": not include_linked,
             "shape": shape,
             "target": {"name": _printable(target["name"]), "path": target["path"]} if target else None,
+            # None for a whole-note query; the lifted text for a passage one, so
+            # a front end can show what was actually asked rather than the note.
+            "passage": _printable(passage) if passage is not None else None,
             "similar": [dict(r, name=_printable(r["name"]), preview=_printable(r["preview"])) for r in results],
         },
         indent=2,

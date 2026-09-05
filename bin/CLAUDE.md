@@ -185,6 +185,87 @@ is exactly what a `title: X | text: Y` document format rewards — and it would
 force a re-index of the whole vault to serve the mode that isn't the primary
 one. Not adopted on that evidence.
 
+### `--search --from NOTE`
+
+`--from` names the note a phrase was lifted out of, which is what turns a typed
+search into a passage query: that note is excluded from its own results, and it
+supplies the cluster and the existing links, so the ranking goes back to
+crossing-vs-within and the payload is the `similar` shape rather than `groups`.
+`--all` and `--no-bridge` are refused with a bare `--search` and accepted with
+`--from`, for the same reason — with `--from` there is a target note for them to
+mean something about. Positionally nothing changes: `--from` is a flag argument,
+so `--search` is still vault-only.
+
+Three things differ from a typed phrase, all measured on four public corpora
+over two seeds, 522 source notes, with the source note as the unit:
+
+- **No query prefix.** `QUERY_PREFIX` is worth +1.5% MRR on *title-shaped*
+  queries and nothing on lifted passages — pooled −0.6% / −0.8% over 522 source
+  notes in four public corpora, two seeds, both intervals spanning zero. Note
+  the corpora *disagree* rather than agreeing on zero (a 326-note wiki loses
+  ~1.5% under the prefix, a 23-note vault gains ~9%), so this is a weak call
+  taken on the grounds that a prefix whose only measured benefit is for a
+  different query shape should not be applied on faith. Document-side prefixing
+  is consistently worse and is out.
+- **The passage is normalized exactly as a document is** — `note_body()`:
+  frontmatter dropped, `[[wikilinks]]` flattened. The index is built that way,
+  so a raw selection would spend the model's budget on brackets and slugs the
+  documents do not have, and the daily note this feature is for is
+  wikilink-dense. Same argument as the name prefix above: match the shape the
+  index was built in. `passage_chunks(body, name) == note_chunks(name, body)`
+  is asserted, which is the cheapest way to keep the two ends from drifting.
+- **The passage is chunked.** `passage_chunks()` windows a long selection the
+  way `note_chunks()` windows a note, reusing the same `_sections` / `_windows`
+  / `_packed`, so a long selection is not silently truncated at the model's
+  context. `MAX_QUERY_CHUNKS` (8) is far tighter than `MAX_CHUNKS` (40) on
+  purpose: the note ceiling bounds what is stored, this one bounds one
+  interactive query, since every query chunk is scored against every note.
+
+  **Packing is gated on `MAX_QUERY_CHUNKS`, not `MAX_SECTIONS`** — do not
+  "align" it with `note_chunks`. There the gate (32) is *below* the cap (40), so
+  no section is ever lost; here the cap is 8, so gating at 32 meant a selection
+  of 9 to 32 short sections got no packing and had everything past the eighth
+  silently dropped — 61% of a 20-section selection, measured. Found by review.
+- **The origin note's name is prefixed — but only when it carries words.** This
+  is the one conditional in the file, and it is conditional because both halves
+  were measured. A real name on every chunk, matching how documents are stored
+  (`name\n\nbody`), is worth **+2.7% and +1.8% MRR** across two seeds, positive
+  on all four public corpora. An *uninformative* name is not merely inert:
+  replacing every corpus title with a date-shaped string, changing nothing else,
+  costs **−2.2% and −2.0% pooled** over the same two seeds, and **−3.8% / −3.6%**
+  on the largest corpus, every one of those intervals excluding zero. That is exactly the
+  daily note the feature exists for — `2026-09-05` says nothing about the
+  passage, and date strings are highly similar to *each other*, the same effect
+  that already defeats `--duplicates`' title gate. `informative_name()` is the
+  gate: a run of two or more letters in any script. It rejects `2026-09-05`,
+  `20260905` and a bare folgezettel id like `1a2b`, and accepts `1a2b Some
+  Title`, which is the shape `branch.lua` actually creates.
+
+`--from` resolves **strictly** when it names a path: `resolve_target(...,
+path_only=True)`. The bare-name fallback is still there for `--from some-note`,
+but a *path* must match a note that was actually scanned, matched against either
+the path it was scanned under or its realpath. Both halves are load-bearing:
+
+- Without the strict match, `--from drafts/scratch.md --exclude 'drafts/*'`
+  silently resolved to `archive/scratch.md` — a different note, which then
+  labelled the results, got excluded from them, and became ctrl-y's wikilink
+  target. Found by review, reproduced, now pinned.
+- Without the realpath pass, the strict match would break the editor outright.
+  nvim reports a buffer's name with symlinks resolved while the vault stays as
+  configured, so in a symlinked vault (`~/notes -> ~/Dropbox/notes`) the
+  scanned-path comparison matches *nothing*. The realpath scan runs only when
+  the cheap comparison misses.
+
+The whole-note query path still uses the lenient form, so `ariadne-similar
+subdir/note.md VAULT` keeps working from a shell.
+
+The ranking itself moved to `ariadne_ranking.py` when `--from` pushed
+`ariadne-similar` past 400 lines — same reason `ariadne_note_text.py` came out
+of it earlier. `rank_against(query_chunks, origin, ...)` is the general form and
+`find_similar(target, ...)` is the whole-note case that passes the target's own
+stored vectors; `ariadne-similar` re-exports both under their old names so the
+suites reaching them through it needed no change.
+
 `--per-cluster` (default 3) caps hits shown per cluster; `-n`/`--limit`
 (shared with the other modes, default 10) caps how many clusters are shown,
 not hits within one — a third meaning for a flag whose meaning already varies

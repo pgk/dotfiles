@@ -13,10 +13,17 @@ import ariadne_duplicates
 import ariadne_embed_cache
 import ariadne_embed_client
 import ariadne_note_text
+import ariadne_ranking
 import ariadne_search
 import ariadne_similar_report
 
 EmbedUnavailable = ariadne_embed_cache.EmbedUnavailable
+# Re-exported, not just imported: `find_similar` is the name four suites reach
+# it through, so moving it into a module cost no test churn. `rank_against` is
+# re-exported only so `run_search` below reads the same way; tests go straight
+# to `ariadne_ranking`.
+find_similar = ariadne_ranking.find_similar
+rank_against = ariadne_ranking.rank_against
 _printable = ariadne_common.printable
 require_vault = ariadne_common.require_vault
 
@@ -46,81 +53,6 @@ def scan_vault(vault, excludes):
     return notes
 
 
-def linked_paths(target, notes, name_index):
-    """Paths linked to the target in either direction."""
-    linked = set()
-    for link in target["links"]:
-        path = ariadne_common.resolve_link(link, name_index)
-        if path:
-            linked.add(path)
-    for note in notes:
-        if note["path"] == target["path"]:
-            continue
-        for link in note["links"]:
-            if ariadne_common.resolve_link(link, name_index) == target["path"]:
-                linked.add(note["path"])
-                break
-    return linked
-
-
-def _bridged(results, limit):
-    """Cross-cluster pairs first.
-
-    A link into a neighbourhood the target is already part of adds little, while
-    one that bridges clusters is structurally novel. A hard partition rather than
-    a weighted blend, because a weight would be a number tuned against a vault
-    that is never measured — but the limit applies to each side separately, or
-    the far larger cross-cluster pool would bury the within-cluster hits entirely
-    and there would be nothing to compare against.
-    """
-    crossing = [r for r in results if r["crosses"]]
-    within = [r for r in results if not r["crosses"]]
-    return crossing[:limit] + within[:limit]
-
-
-def find_similar(target, notes, cached, name_index, limit, include_linked, *, clusters=None, bridge_first=True):
-    target_entry = cached.get((target["path"], target["hash"]))
-    if not target_entry:
-        raise EmbedUnavailable(f"no embedding for target note: {_printable(target['name'])}")
-    # The target is the query here, so it gets to match on any one of its
-    # sections; every candidate is scored as a whole note. See
-    # ariadne_embed_cache.best_chunk_match for why the asymmetry is deliberate.
-    target_chunks = ariadne_embed_cache.chunk_vectors(target_entry)
-
-    # Always computed: under --all it still labels each row, it just stops filtering.
-    linked = linked_paths(target, notes, name_index)
-    # No cluster data means no bridging signal, so every pair scores alike and
-    # ranking falls back to similarity alone.
-    clusters = clusters or {}
-    target_cluster = clusters.get(target["path"])
-    results = []
-    for note in notes:
-        if note["path"] == target["path"]:
-            continue
-        if note["path"] in linked and not include_linked:
-            continue
-        entry = cached.get((note["path"], note["hash"]))
-        if not entry:
-            continue
-        cluster = clusters.get(note["path"])
-        score = ariadne_embed_cache.best_chunk_match(
-            target_chunks, ariadne_embed_cache.note_vector(entry)
-        )
-        results.append(
-            {
-                "name": note["name"],
-                "path": note["path"],
-                "score": round(score, 4),
-                "linked": note["path"] in linked,
-                "crosses": cluster != target_cluster,
-                "cluster": cluster,
-                "preview": note["preview"],
-            }
-        )
-    results.sort(key=lambda r: (-r["score"], r["name"].lower()))
-    return _bridged(results, limit) if bridge_first else results[:limit]
-
-
 def cluster_notes(notes, name_index):
     """Wikilink communities over the notes already scanned, plus the graph they came from."""
     neighbors = ariadne_cluster.adjacency_from_links(notes, name_index)
@@ -128,11 +60,32 @@ def cluster_notes(notes, name_index):
     return labels, ariadne_cluster.shape(neighbors, labels)
 
 
-def resolve_target(spec, notes, name_index):
+def resolve_target(spec, notes, name_index, *, path_only=False):
+    """The scanned note `spec` names -- a path or a bare note name -- or None.
+
+    A path is matched against the path a note was scanned under and, failing
+    that, against its realpath: nvim reports a buffer's name with symlinks
+    resolved while the vault stays as configured, so in a symlinked vault
+    (`~/notes -> ~/Dropbox/notes`) the first form matches nothing at all. The
+    realpath pass is skipped unless the cheap one misses.
+
+    `path_only` drops the bare-name fallback for a spec that names a path, and
+    `--from` sets it. Without that, a path pointing at a note which was never
+    scanned -- one `--exclude` kept out of the run, say -- silently resolves to
+    whatever *other* note shares its basename, and the results are then labelled
+    with, and exclude, a note the user never named.
+    """
     by_path = {n["path"]: n for n in notes}
     candidate = os.path.abspath(os.path.expanduser(spec))
     if candidate in by_path:
         return by_path[candidate]
+    looks_like_path = os.sep in spec or (os.path.altsep and os.path.altsep in spec)
+    if looks_like_path:
+        for note in notes:
+            if os.path.realpath(note["path"]) == candidate:
+                return note
+        if path_only:
+            return None
     stem = os.path.splitext(os.path.basename(spec))[0]
     path = name_index.get(stem.lower())
     return by_path.get(path) if path else None
@@ -151,7 +104,7 @@ def parse_args(argv):
     parser.add_argument("--rebuild", action="store_true", help="With --index, discard the cache and re-embed everything")
     ariadne_duplicates.add_arguments(parser)
     ariadne_search.add_arguments(parser)
-    parser.add_argument("-n", "--limit", type=int, default=10, help="Maximum results per group, so bridge ranking can return up to twice this; one shared limit under --no-bridge. Under --duplicates it caps the 'possible' band only, never the duplicates. Under --search it caps clusters shown, not hits within one (see --per-cluster) (default: 10)")
+    parser.add_argument("-n", "--limit", type=int, default=10, help="Maximum results per group, so bridge ranking can return up to twice this; one shared limit under --no-bridge. Under --duplicates it caps the 'possible' band only, never the duplicates. Under a bare --search it caps clusters shown, not hits within one (see --per-cluster); under --search --from it goes back to the per-group meaning (default: 10)")
     parser.add_argument("--all", action="store_true", help="Include notes already linked to the target")
     parser.add_argument(
         "--no-bridge",
@@ -238,14 +191,26 @@ def load_or_refresh(args, vault, notes, embedder):
     return cached
 
 
+def report_missing_note(args, spec, vault, passage=None):
+    """Exit status for a note spec that names nothing, reported both ways.
+
+    Shared by the two modes that resolve one: a whole-note query and
+    `--search --from`. They differ only in `passage`, which distinguishes the
+    two JSON shapes for the reader.
+    """
+    safe_spec = _printable(spec)
+    print(f"ariadne-similar: no note matching '{safe_spec}' in {vault}", file=sys.stderr)
+    if args.json:
+        print(ariadne_similar_report.format_json(
+            None, [], args.all, vault, args.model,
+            error=f"no note matching '{safe_spec}'", passage=passage))
+    return 1
+
+
 def run_query(args, vault, target_spec, notes, name_index, embedder):
     target = resolve_target(target_spec, notes, name_index)
     if target is None:
-        safe_spec = _printable(target_spec)
-        print(f"ariadne-similar: no note matching '{safe_spec}' in {vault}", file=sys.stderr)
-        if args.json:
-            print(ariadne_similar_report.format_json(None, [], args.all, vault, args.model, error=f"no note matching '{safe_spec}'"))
-        return 1
+        return report_missing_note(args, target_spec, vault)
 
     cached = load_or_refresh(args, vault, notes, embedder)
     clusters, shape = cluster_notes(notes, name_index)
@@ -266,21 +231,55 @@ def run_query(args, vault, target_spec, notes, name_index, embedder):
 
 
 def run_search(args, vault, notes, name_index, embedder):
+    origin = None
+    if args.from_note is not None:
+        origin = resolve_target(args.from_note, notes, name_index, path_only=True)
+        if origin is None:
+            return report_missing_note(args, args.from_note, vault, passage=args.search)
+
     cached = load_or_refresh(args, vault, notes, embedder)
     clusters, shape = cluster_notes(notes, name_index)
+    # The egress notice names what is actually leaving the machine, to the field:
+    # under --from that is a passage out of a note rather than a typed phrase,
+    # and the note's own name goes with it whenever it carries words.
+    if origin is None:
+        sending = "your search phrase"
+    elif ariadne_note_text.informative_name(origin["name"]):
+        sending = "your selected passage and its note's name"
+    else:
+        sending = "your selected passage"
     print(
-        f"ariadne-similar: sending your search phrase to "
+        f"ariadne-similar: sending {sending} to "
         f"{ariadne_embed_client.safe_url(args.endpoint)} ({_printable(args.model)})",
         file=sys.stderr,
     )
-    query_vec = embedder([ariadne_search.query_text(args.search)])[0]
+    query_vecs = embedder(ariadne_search.query_texts(
+        args.search, lifted=origin is not None,
+        name=origin["name"] if origin is not None else None,
+    ))
     if cached:
         dims = ariadne_embed_cache.dims_of(cached)
-        if len(query_vec) != dims:
+        if len(query_vecs[0]) != dims:
             raise EmbedUnavailable(
-                f"query embedding is {len(query_vec)} dims but the index is {dims} — re-run with --rebuild"
+                f"query embedding is {len(query_vecs[0])} dims but the index is {dims} — re-run with --rebuild"
             )
-    return ariadne_search.run(args, vault, notes, cached, clusters, shape, query_vec)
+    if origin is None:
+        return ariadne_search.run(args, vault, notes, cached, clusters, shape, query_vecs[0])
+
+    # With --from the query has a home note, so it is ranked exactly as a
+    # whole-note query is -- see PLAN-0009 question 4.
+    results = rank_against(
+        query_vecs, origin, notes, cached, name_index, args.limit, args.all,
+        clusters=clusters, bridge_first=not args.no_bridge,
+    )
+    if args.json:
+        print(ariadne_similar_report.format_json(
+            origin, results, args.all, vault, args.model, shape=shape, passage=args.search))
+    else:
+        print(ariadne_similar_report.format_text(
+            origin, results, len(notes), args.all, vault, shape,
+            grouped=not args.no_bridge, passage=args.search))
+    return 0
 
 
 def split_positional(args):
@@ -312,9 +311,13 @@ def check_args(args):
     # Refused rather than ignored: both shape a single note's result list, and
     # neither --duplicates nor --search has a target note for them to mean
     # anything about.
+    # --search --from does have a target note, so both mean something there; it
+    # is a bare --search, ranking a phrase that belongs nowhere, that does not.
     for flag, on in (("--all", args.all), ("--no-bridge", args.no_bridge)):
-        if on and (args.duplicates or args.search is not None):
-            raise ValueError(f"{flag} applies to a query, not to --duplicates or --search")
+        if on and (args.duplicates or (args.search is not None and args.from_note is None)):
+            raise ValueError(
+                f"{flag} applies to a query, not to --duplicates or a --search without --from"
+            )
     ariadne_duplicates.check_arguments(args)
     ariadne_search.check_arguments(args)
     ariadne_embed_client.validate_endpoint(args.endpoint, args.allow_remote_endpoint)
@@ -357,11 +360,15 @@ def main(argv=None):
             return 1
         if args.json and args.duplicates:
             ariadne_duplicates.report_unavailable(args, vault, len(notes), str(exc))
-        elif args.json and args.search is not None:
+        elif args.json and args.search is not None and args.from_note is None:
             ariadne_search.report_unavailable(args, vault, len(notes), str(exc))
         elif args.json:
-            target = resolve_target(target_spec, notes, name_index)
-            print(ariadne_similar_report.format_json(target, [], args.all, vault, args.model, error=str(exc)))
+            # --search --from reports in the whole-note shape, so its failure has
+            # to as well: the picker reading it indexes `similar`, not `groups`.
+            spec = args.from_note if args.from_note is not None else target_spec
+            target = resolve_target(spec, notes, name_index)
+            print(ariadne_similar_report.format_json(
+                target, [], args.all, vault, args.model, error=str(exc), passage=args.search))
         else:
             print(f"Embeddings unavailable, no results: {exc}")
         return 0

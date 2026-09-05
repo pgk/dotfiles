@@ -1,4 +1,5 @@
 -- Miscellaneous commands for the Ariadne notes workflow
+local selection = require("plugins.ariadne.selection")
 local utils = require("plugins.ariadne.utils")
 local wikilinks = require("plugins.ariadne.wikilinks")
 
@@ -148,33 +149,11 @@ end
 
 -- Extract selection to new note
 function M.extract_note()
-  -- Get visual selection
-  local start_pos = vim.fn.getpos("'<")
-  local end_pos = vim.fn.getpos("'>")
-  local start_line, start_col = start_pos[2], start_pos[3]
-  local end_line, end_col = end_pos[2], end_pos[3]
-
-  local lines = vim.api.nvim_buf_get_lines(0, start_line - 1, end_line, false)
-  if #lines == 0 then
+  local selected_text = selection.visual_selection()
+  if not selected_text then
     vim.notify("No text selected", vim.log.levels.WARN)
     return
   end
-
-  -- Clamp end_col to actual line length (handles V and $ selections)
-  local last_line_len = #lines[#lines]
-  if end_col > last_line_len then
-    end_col = last_line_len
-  end
-
-  -- Adjust for partial line selection
-  if #lines == 1 then
-    lines[1] = lines[1]:sub(start_col, end_col)
-  else
-    lines[1] = lines[1]:sub(start_col)
-    lines[#lines] = lines[#lines]:sub(1, end_col)
-  end
-
-  local selected_text = table.concat(lines, "\n")
 
   -- Prompt for note name
   local note_name = vim.fn.input("New note name: ")

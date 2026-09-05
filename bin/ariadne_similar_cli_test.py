@@ -183,6 +183,23 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["query"], "database crash recovery")
         self.assertTrue(payload["error"])
 
+    def test_a_from_search_without_a_server_reports_in_the_whole_note_shape(self):
+        """The two --search modes fail in different JSON shapes, and must.
+
+        similar.lua decodes `--search --from` output requiring the `similar`
+        key; emitting the grouped shape here makes the picker report a raw JSON
+        blob as a failure instead of the clean "embeddings unavailable" warning.
+        Nothing pinned this branch, and deleting its condition kept every suite
+        green."""
+        result = self.run_cli(["--search", "x", "--from", "a", self.vault, "--json"])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertFalse(payload["available"])
+        self.assertEqual(payload["similar"], [])
+        self.assertNotIn("groups", payload)
+        self.assertEqual(payload["target"]["name"], "a")
+        self.assertEqual(payload["passage"], "x")
+
     def test_search_without_a_server_warns_on_stderr(self):
         result = self.run_cli(["--search", "x", self.vault])
         self.assertEqual(result.returncode, 0, result.stderr)

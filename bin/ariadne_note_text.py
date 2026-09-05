@@ -118,6 +118,76 @@ def _packed(sections):
     return packed
 
 
+# A query's chunks are each scored against every note in the vault, so this
+# bounds one interactive query rather than one note's stored size -- which is
+# why it is far tighter than MAX_CHUNKS. At ~29 ms per chunk over 3,000 notes,
+# eight keeps a passage query under a quarter of a second, and eight windows
+# span ~10,600 characters, longer than any paragraph anyone selects on purpose.
+MAX_QUERY_CHUNKS = 8
+# A run of two or more letters -- any script, so a CJK title counts. What this
+# separates is a name carrying *words* from one that is only digits and
+# punctuation: `2026-09-05`, or a bare folgezettel id like `1a2b`.
+WORDY_RE = re.compile(r"[^\W\d_]{2,}", re.UNICODE)
+
+
+def informative_name(name):
+    """Whether a note's name says anything, as opposed to being a date or an id.
+
+    The distinction is load-bearing rather than cosmetic: prefixing a passage
+    with its note's name is worth +2.7% / +1.8% MRR when the name is words, and
+    costs -2.2% / -2.0% when it is a date. See `passage_chunks` for the method.
+    """
+    return bool(name) and bool(WORDY_RE.search(name))
+
+
+def passage_chunks(text, name=None):
+    """A lifted passage as the strings to embed for it.
+
+    Cut the way a note is -- at its own headings, then windowed -- so a long
+    selection is not silently truncated at the model's context, which is the
+    defect `note_chunks()` removed for notes. A short one stays a single vector.
+
+    `name` is the note the passage was lifted out of, and it is prefixed the way
+    `note_chunks()` prefixes a note's own name **only when it carries words**.
+    Measured over 522 source notes in four public corpora, two seeds: a real
+    name is worth +2.7% and +1.8% MRR, positive on every corpus. The obvious
+    reading is shape-matching -- documents are stored as `name\n\nbody`, so a
+    query in that shape sits closer to how the index was built.
+
+    A blank passage is the caller's problem, not this function's: it returns a
+    single empty chunk rather than raising, and `--search` already refuses a
+    blank phrase before reaching here.
+
+    An *uninformative* name is not merely inert, which is why this is
+    conditional rather than unconditional. Replacing each corpus title with a
+    date-shaped string, changing nothing else, costs -2.2% and -2.0% pooled over
+    the same two seeds -- and -3.8% / -3.6% on the largest corpus, every one of
+    those intervals excluding zero. That is exactly the daily note this whole feature exists
+    to serve -- `2026-09-05` says nothing about the passage, and date strings are
+    highly similar to each other, which is the same effect that already defeats
+    `--duplicates`' title gate.
+    """
+    # Normalized exactly as a document is: frontmatter dropped, `[[wikilinks]]`
+    # flattened to the words a reader sees. The index is built that way, so a
+    # raw selection would spend the model's budget on brackets and slugs the
+    # documents do not have -- and the daily note this feature is for is
+    # wikilink-dense. Same reasoning as note_chunks, applied to the query side.
+    text = note_body(text)
+    head = name if informative_name(name) else None
+    if len(text) <= CHUNK_THRESHOLD:
+        return [_headed(head, text) if head else text[:MAX_CHARS]]
+    sections = _sections(text)
+    # Packed against the cap that actually applies here. Gating on MAX_SECTIONS
+    # like note_chunks does would be wrong: there the cap (MAX_CHUNKS, 40) is
+    # larger than the gate (32), so no section is ever lost, while here the cap
+    # is 8 -- so a selection of 9 to 32 short sections got no packing and had
+    # everything past the eighth silently dropped.
+    if len(sections) > MAX_QUERY_CHUNKS:
+        sections = _packed(sections)
+    chunks = [piece for section in sections for piece in _windows(section)]
+    return [_headed(head, c) if head else c[:MAX_CHARS] for c in chunks[:MAX_QUERY_CHUNKS]]
+
+
 def note_text(name, raw):
     """The whole note as one embeddable string -- what a short note still embeds as.
 
