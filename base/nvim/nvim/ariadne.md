@@ -260,6 +260,20 @@ What gets embedded is the note's name, then its body with every `[[wikilink]]`
 replaced by the words a reader sees — `[[working-memory|Working Memory]]` embeds
 as `Working Memory`, not as brackets and a slug.
 
+Notes over 1500 characters are embedded **in pieces**, split at their own `##`
+headings, and the note's vector is the average of those pieces. Shorter notes —
+most of a vault — are embedded whole, exactly as before. This exists because a
+single vector stopped at 8000 characters: past that, a long note's content was
+simply not in the index, so nothing could retrieve it. Chunking also makes a
+long note's vector a better summary of the whole note rather than of its
+opening. Against a public vault's own wikilinks it retrieves ~9% better.
+
+`:AriadneSimilar` additionally lets the *target* note match on any one of its
+sections, so opening a sprawling note and asking "what else is like this" can
+hit on the one section that matters. Candidates are always scored as whole
+notes — scoring them section-by-section too turns long notes into magnets that
+rank highly for everything.
+
 Changing that rule invalidates the whole cache at once, because every note's
 content hash changes with it. Flattening the wikilinks did exactly that, so the
 first `:AriadneSimilar` or `:AriadneDuplicates` after it lands will report the
@@ -291,7 +305,7 @@ silently upload the notes you meant to hold back.
 `ariadne-similar` is the only tool in this workflow that sends note text off-process,
 so it is deliberately noisy and restrictive about it:
 
-- Before embedding anything it prints `sending N note(s) from <vault> to <endpoint>`,
+- Before embedding anything it prints `sending N note(s) as C chunk(s), K KB, from <vault> to <endpoint>`,
   which the picker surfaces as a notification
 - A non-loopback endpoint is **refused** unless you pass `--allow-remote-endpoint`,
   so a stray `NOTES_EMBED_URL` can't quietly ship the vault to a remote host
@@ -328,6 +342,11 @@ is a typed phrase instead of an existing note. With no argument it prompts;
   (default 10) caps how many clusters are shown
 - Never writes the query's embedding to the cache — computed fresh every
   time. (Stale *notes* still get topped up first, same as any other query.)
+- The phrase is sent to the model as `task: search result | query: <phrase>`,
+  the retrieval-query form embeddinggemma was trained on. Notes are still
+  embedded as themselves, so this needs no re-index — it only changes how the
+  query side is read. Worth +1.5% MRR on a 495-note public corpus (24 queries
+  better, 9 worse)
 - Same degradation as everything else here: no embedding server running
   means an empty result, not an error
 
