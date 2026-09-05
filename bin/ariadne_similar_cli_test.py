@@ -343,6 +343,34 @@ class FullQueryTests(unittest.TestCase):
         self.assertNotIn("linked", names)
         self.assertEqual(names[0], "unlinked")
 
+    def test_a_chunked_note_survives_index_save_load_and_query(self):
+        """The whole pipeline on a note big enough to split -- every other end-to-end
+        case here is one chunk per note, as is dev-vault, so nothing else covers it."""
+        long_note = (
+            "## Composting\n" + "gardening compost soil " * 60
+            + "\n\n## Registers\n" + "assembly language registers " * 60
+        )
+        write_vault(self.vault, {"sprawling.md": long_note})
+        notes = ariadne_similar.scan_vault(self.vault, [])
+        by_name = {n["name"]: n for n in notes}
+        self.assertGreater(len(by_name["sprawling"]["chunks"]), 1)
+
+        args = ariadne_similar.parse_args(["target", self.vault, "--json"])
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(ariadne_similar.run_index(args, self.vault, notes, fake_embedder()), 0)
+        cached, _ = ariadne_embed_cache.load_cache(ariadne_embed_cache.cache_dir(self.vault), args.model)
+
+        entry = cached[(by_name["sprawling"]["path"], by_name["sprawling"]["hash"])]
+        self.assertEqual(len(entry), len(by_name["sprawling"]["chunks"]) + 1)
+        name_index = ariadne_common.build_name_index([n["path"] for n in notes])
+        target = ariadne_similar.resolve_target("unrelated", notes, name_index)
+        scored = {
+            r["name"]: r["score"]
+            for r in ariadne_similar.find_similar(target, notes, cached, name_index, 10, False)
+        }
+        # 'unrelated' is about registers, and one of the long note's sections is too.
+        self.assertGreater(scored["sprawling"], scored["unlinked"])
+
     def test_the_cache_lands_outside_the_vault_and_inside_the_cache_dir(self):
         args = ariadne_similar.parse_args(["target", self.vault, "--json"])
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):

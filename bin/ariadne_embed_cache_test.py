@@ -19,9 +19,17 @@ def vector(*values):
     return ariadne_embed_cache.normalize(list(values))
 
 
-def make_notes(count=3, dims=4):
-    notes = [{"name": f"n{i}", "path": f"/v/n{i}.md", "hash": f"h{i}", "text": f"n{i}"} for i in range(count)]
-    cached = {(n["path"], n["hash"]): vector(*([float(i + 1)] * dims)) for i, n in enumerate(notes)}
+def make_notes(count=3, dims=4, chunks=1):
+    notes = [
+        {"name": f"n{i}", "path": f"/v/n{i}.md", "hash": f"h{i}", "chunks": [f"n{i}-{c}" for c in range(chunks)]}
+        for i in range(count)
+    ]
+    cached = {
+        (n["path"], n["hash"]): ariadne_embed_cache.note_entry(
+            [vector(*([float(i + c + 1)] * (dims - 1)), 1.0) for c in range(chunks)]
+        )
+        for i, n in enumerate(notes)
+    }
     return notes, cached
 
 
@@ -57,6 +65,87 @@ class NormalizeTests(unittest.TestCase):
         self.assertEqual(list(vector(0.0, 0.0)), [0.0, 0.0])
 
 
+class BestChunkMatchTests(unittest.TestCase):
+    """Chunks on the query side, one vector on the document side."""
+
+    def test_the_best_matching_query_chunk_wins(self):
+        chunks = [vector(1.0, 0.0), vector(0.0, 1.0)]
+        self.assertAlmostEqual(
+            ariadne_embed_cache.best_chunk_match(chunks, vector(0.0, 1.0)), 1.0, places=5
+        )
+
+    def test_a_single_chunk_query_is_the_plain_dot_product(self):
+        self.assertAlmostEqual(
+            ariadne_embed_cache.best_chunk_match([vector(1.0, 0.0)], vector(1.0, 1.0)),
+            math.sqrt(0.5),
+            places=5,
+        )
+
+
+class NoteEntryTests(unittest.TestCase):
+    """An entry is the centroid, then the chunks -- and one vector when there is one chunk."""
+
+    def test_a_single_chunk_note_stores_exactly_one_vector(self):
+        vec = vector(0.3, 0.9, 0.1)
+        entry = ariadne_embed_cache.note_entry([vec])
+        self.assertEqual(len(entry), 1)
+        self.assertIs(ariadne_embed_cache.note_vector(entry), vec)
+        self.assertEqual(list(ariadne_embed_cache.chunk_vectors(entry)), [vec])
+
+    def test_a_multi_chunk_note_leads_with_its_centroid(self):
+        chunks = [vector(1.0, 0.0), vector(0.0, 1.0)]
+        entry = ariadne_embed_cache.note_entry(chunks)
+        self.assertEqual(len(entry), 3)
+        self.assertEqual(
+            list(ariadne_embed_cache.note_vector(entry)),
+            list(ariadne_embed_cache.centroid(chunks)),
+        )
+        self.assertEqual(
+            [list(v) for v in ariadne_embed_cache.chunk_vectors(entry)],
+            [list(v) for v in chunks],
+        )
+
+    def test_the_stored_centroid_survives_a_round_trip(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        cdir = os.path.join(tmp.name, "cache")
+        chunks = [vector(1.0, 0.0), vector(0.0, 1.0)]
+        notes = [{"path": "/v/a.md", "hash": "h", "chunks": ["a", "b"]}]
+        cached = {("/v/a.md", "h"): ariadne_embed_cache.note_entry(chunks)}
+        ariadne_embed_cache.save_cache(cdir, "m", 2, notes, cached)
+        loaded, _ = ariadne_embed_cache.load_cache(cdir, "m")
+        entry = loaded[("/v/a.md", "h")]
+        self.assertEqual(
+            list(ariadne_embed_cache.note_vector(entry)),
+            list(ariadne_embed_cache.centroid(chunks)),
+        )
+
+
+class CentroidTests(unittest.TestCase):
+    def test_a_single_chunk_note_keeps_its_own_vector(self):
+        vec = vector(0.3, 0.9, 0.1)
+        self.assertIs(ariadne_embed_cache.centroid([vec]), vec)
+
+    def test_the_mean_is_renormalised_to_unit_length(self):
+        result = ariadne_embed_cache.centroid([vector(1.0, 0.0), vector(0.0, 1.0)])
+        self.assertAlmostEqual(sum(v * v for v in result), 1.0, places=5)
+        self.assertAlmostEqual(result[0], result[1], places=5)
+
+    def test_the_centroid_sits_between_its_chunks(self):
+        near, far = vector(1.0, 0.0), vector(0.0, 1.0)
+        result = ariadne_embed_cache.centroid([near, near, far])
+        self.assertGreater(math.sumprod(result, near), math.sumprod(result, far))
+
+
+class DimsOfTests(unittest.TestCase):
+    def test_the_width_comes_from_any_entry(self):
+        _, cached = make_notes(count=2, dims=4, chunks=3)
+        self.assertEqual(ariadne_embed_cache.dims_of(cached), 4)
+
+    def test_an_empty_cache_has_no_width(self):
+        self.assertEqual(ariadne_embed_cache.dims_of({}), 0)
+
+
 class RoundTripTests(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
@@ -69,8 +158,84 @@ class RoundTripTests(unittest.TestCase):
         loaded, dims = ariadne_embed_cache.load_cache(self.cdir, "m")
         self.assertEqual(dims, 4)
         self.assertEqual(set(loaded), set(cached))
-        for key, vec in cached.items():
-            self.assertEqual(list(loaded[key]), list(vec))
+        for key, vecs in cached.items():
+            self.assertEqual([list(v) for v in loaded[key]], [list(v) for v in vecs])
+
+    def test_round_trip_keeps_each_note_chunks_in_order(self):
+        notes, cached = make_notes(count=3, chunks=4)
+        ariadne_embed_cache.save_cache(self.cdir, "m", 4, notes, cached)
+        loaded, _ = ariadne_embed_cache.load_cache(self.cdir, "m")
+        for key, vecs in cached.items():
+            self.assertEqual([list(v) for v in loaded[key]], [list(v) for v in vecs])
+
+    def test_notes_with_different_chunk_counts_stay_paired(self):
+        """The bug the chunk counts exist to prevent: one note's vectors read as another's."""
+        notes, cached = make_notes(count=3, chunks=1)
+        notes[1]["chunks"] = ["a", "b", "c"]
+        key = (notes[1]["path"], notes[1]["hash"])
+        cached[key] = ariadne_embed_cache.note_entry(
+            [vector(0.0, 0.0, 0.0, 1.0), vector(0.0, 0.0, 1.0, 0.0), vector(0.0, 1.0, 0.0, 0.0)]
+        )
+        ariadne_embed_cache.save_cache(self.cdir, "m", 4, notes, cached)
+        loaded, _ = ariadne_embed_cache.load_cache(self.cdir, "m")
+        for k, vecs in cached.items():
+            self.assertEqual([list(v) for v in loaded[k]], [list(v) for v in vecs])
+
+    def test_a_pre_chunking_cache_invalidates_rather_than_mispairing(self):
+        notes, cached = make_notes(count=3, chunks=2)
+        ariadne_embed_cache.save_cache(self.cdir, "m", 4, notes, cached)
+        meta_path = Path(self.cdir) / "index.json"
+        meta = json.loads(meta_path.read_text())
+        # Exactly the old format: one entry per note, no chunk count. Reading it
+        # as one vector per note would hand note 1 note 0's second chunk.
+        meta["notes"] = [{"path": e["path"], "hash": e["hash"]} for e in meta["notes"]]
+        meta_path.write_text(json.dumps(meta))
+        self.assertEqual(ariadne_embed_cache.load_cache(self.cdir, "m"), ({}, 0))
+
+    def test_a_nonsense_chunk_count_is_rejected(self):
+        notes, cached = make_notes()
+        for bad in (0, -1, "2", True, None, 1.0):
+            ariadne_embed_cache.save_cache(self.cdir, "m", 4, notes, cached)
+            meta_path = Path(self.cdir) / "index.json"
+            meta = json.loads(meta_path.read_text())
+            meta["notes"][1]["count"] = bad
+            meta_path.write_text(json.dumps(meta))
+            self.assertEqual(ariadne_embed_cache.load_cache(self.cdir, "m"), ({}, 0), f"count={bad!r}")
+
+    def test_an_over_cap_count_is_rejected_by_the_cap_not_by_the_file_size(self):
+        """Sized to match, so only MAX_VECTORS can reject it."""
+        over = ariadne_embed_cache.MAX_VECTORS + 1
+        os.makedirs(self.cdir, exist_ok=True)
+        (Path(self.cdir) / "v.f32").write_bytes(b"\x00" * (over * 4))
+        (Path(self.cdir) / "index.json").write_text(
+            json.dumps({"model": "m", "dims": 1, "vectors": "v.f32",
+                        "notes": [{"path": "/v/a.md", "hash": "h", "count": over}]})
+        )
+        self.assertEqual(ariadne_embed_cache.load_cache(self.cdir, "m"), ({}, 0))
+
+    def test_save_refuses_a_note_the_cache_could_never_load_back(self):
+        """Writing it would drop the whole cache on every later read, so every run
+        would re-embed and re-upload the entire vault with no diagnostic.
+
+        Both ends of load_cache's bound, not just the top: an empty entry is
+        rejected there too, and would fail exactly the same way.
+        """
+        over = ariadne_embed_cache.MAX_VECTORS + 1
+        for entry in ([vector(1.0, 0.0)] * over, []):
+            notes = [{"path": "/v/a.md", "hash": "h", "chunks": ["c"] * len(entry)}]
+            with self.assertRaises(ariadne_embed_cache.EmbedUnavailable) as caught:
+                ariadne_embed_cache.save_cache(self.cdir, "m", 2, notes, {("/v/a.md", "h"): entry})
+            self.assertIn("/v/a.md", str(caught.exception))
+            self.assertFalse((Path(self.cdir) / "index.json").exists())
+
+    def test_a_boolean_dims_is_not_a_width(self):
+        notes, cached = make_notes()
+        ariadne_embed_cache.save_cache(self.cdir, "m", 4, notes, cached)
+        meta_path = Path(self.cdir) / "index.json"
+        meta = json.loads(meta_path.read_text())
+        meta["dims"] = True
+        meta_path.write_text(json.dumps(meta))
+        self.assertEqual(ariadne_embed_cache.load_cache(self.cdir, "m"), ({}, 0))
 
     def test_different_model_invalidates_cache(self):
         notes, cached = make_notes()
@@ -93,14 +258,15 @@ class RoundTripTests(unittest.TestCase):
         self.assertNotIn(("/v/n2.md", "h2"), loaded)
 
     def test_index_json_holds_only_paths_and_hashes_no_note_body(self):
-        notes = [{"name": "n0", "path": "/v/n0.md", "hash": "h0", "text": "SECRET BODY TEXT"}]
-        cached = {("/v/n0.md", "h0"): vector(1.0, 0.0, 0.0, 0.0)}
+        notes = [{"name": "n0", "path": "/v/n0.md", "hash": "h0", "chunks": ["SECRET BODY TEXT"]}]
+        cached = {("/v/n0.md", "h0"): ariadne_embed_cache.note_entry([vector(1.0, 0.0, 0.0, 0.0)])}
         ariadne_embed_cache.save_cache(self.cdir, "m", 4, notes, cached)
         raw = (Path(self.cdir) / "index.json").read_text()
         self.assertNotIn("SECRET BODY TEXT", raw)
         meta = json.loads(raw)
         # Paths are stored, and in this vault a path *is* the note title — hence 0600.
-        self.assertEqual(sorted(meta["notes"][0]), ["hash", "path"])
+        # The vector count is a count, not text.
+        self.assertEqual(sorted(meta["notes"][0]), ["count", "hash", "path"])
 
 
 class PairingTests(unittest.TestCase):
@@ -153,12 +319,15 @@ class PairingTests(unittest.TestCase):
             self.assertEqual(ariadne_embed_cache.load_cache(self.cdir, "m"), ({}, 0))
 
     def test_a_vectors_field_with_a_path_separator_is_rejected(self):
-        notes, cached = make_notes()
-        ariadne_embed_cache.save_cache(self.cdir, "m", 4, notes, cached)
-        meta_path = Path(self.cdir) / "index.json"
-        meta = json.loads(meta_path.read_text())
-        meta["vectors"] = "../../../etc/passwd"
-        meta_path.write_text(json.dumps(meta))
+        """The outside file is sized to match, so only the basename check can reject it —
+        with `../../../etc/passwd` the size check does the work and the guard is untested."""
+        outside = Path(self.cdir).parent / "secret.bin"
+        outside.write_bytes(b"\x00\x00\x80\x3f" * 4)
+        os.makedirs(self.cdir, exist_ok=True)
+        (Path(self.cdir) / "index.json").write_text(
+            json.dumps({"model": "m", "dims": 4, "vectors": "../secret.bin",
+                        "notes": [{"path": "/v/a.md", "hash": "h", "count": 1}]})
+        )
         self.assertEqual(ariadne_embed_cache.load_cache(self.cdir, "m"), ({}, 0))
 
     def test_absurd_dims_are_rejected_without_allocating(self):
@@ -172,6 +341,16 @@ class PairingTests(unittest.TestCase):
 
 
 class PermissionTests(unittest.TestCase):
+    def test_a_cache_dir_left_world_readable_by_an_older_version_is_tightened(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        cdir = os.path.join(tmp.name, "cache")
+        os.makedirs(cdir, mode=0o755)
+        os.chmod(cdir, 0o755)
+        notes, cached = make_notes()
+        ariadne_embed_cache.save_cache(cdir, "m", 4, notes, cached)
+        self.assertEqual(stat.S_IMODE(os.stat(cdir).st_mode), 0o700)
+
     def test_cache_is_not_readable_by_other_users(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
@@ -195,8 +374,8 @@ class PermissionTests(unittest.TestCase):
 
 class RefreshTests(unittest.TestCase):
     def test_only_uncached_notes_are_embedded(self):
-        notes = [{"path": f"/v/n{i}.md", "hash": f"h{i}", "text": f"note {i}"} for i in range(3)]
-        cached = {("/v/n0.md", "h0"): vector(*([1.0] * 8))}
+        notes = [{"path": f"/v/n{i}.md", "hash": f"h{i}", "chunks": [f"note {i}"]} for i in range(3)]
+        cached = {("/v/n0.md", "h0"): ariadne_embed_cache.note_entry([vector(*([1.0] * 8))])}
         calls = []
         dims, embedded = ariadne_embed_cache.refresh(notes, cached, 8, counting_embedder(calls=calls))
         self.assertEqual((dims, embedded), (8, 2))
@@ -204,31 +383,31 @@ class RefreshTests(unittest.TestCase):
         self.assertEqual(len(cached), 3)
 
     def test_nothing_to_do_when_all_cached(self):
-        notes = [{"path": "/v/a.md", "hash": "h", "text": "a"}]
-        cached = {("/v/a.md", "h"): vector(*([1.0] * 8))}
+        notes = [{"path": "/v/a.md", "hash": "h", "chunks": ["a"]}]
+        cached = {("/v/a.md", "h"): ariadne_embed_cache.note_entry([vector(*([1.0] * 8))])}
         calls = []
         _, embedded = ariadne_embed_cache.refresh(notes, cached, 8, counting_embedder(calls=calls))
         self.assertEqual((embedded, calls), (0, []))
 
     def test_dims_are_inferred_from_the_first_batch(self):
-        notes = [{"path": "/v/a.md", "hash": "h", "text": "a"}]
+        notes = [{"path": "/v/a.md", "hash": "h", "chunks": ["a"]}]
         dims, _ = ariadne_embed_cache.refresh(notes, {}, 0, counting_embedder(dims=16))
         self.assertEqual(dims, 16)
 
     def test_changed_embedding_size_points_at_the_recovery_flag(self):
-        notes = [{"path": "/v/a.md", "hash": "h", "text": "a"}]
+        notes = [{"path": "/v/a.md", "hash": "h", "chunks": ["a"]}]
         with self.assertRaises(ariadne_embed_cache.EmbedUnavailable) as caught:
             ariadne_embed_cache.refresh(notes, {}, 32, counting_embedder(dims=8))
         self.assertIn("--rebuild", str(caught.exception))
 
     def test_batching_covers_every_note(self):
-        notes = [{"path": f"/v/n{i}.md", "hash": "h", "text": f"note {i}"} for i in range(10)]
+        notes = [{"path": f"/v/n{i}.md", "hash": "h", "chunks": [f"note {i}"]} for i in range(10)]
         calls = []
         _, embedded = ariadne_embed_cache.refresh(notes, {}, 0, counting_embedder(calls=calls), batch_size=3)
         self.assertEqual((embedded, len(calls)), (10, 10))
 
     def test_a_short_response_is_rejected_rather_than_silently_truncating(self):
-        notes = [{"path": f"/v/n{i}.md", "hash": "h", "text": f"note {i}"} for i in range(3)]
+        notes = [{"path": f"/v/n{i}.md", "hash": "h", "chunks": [f"note {i}"]} for i in range(3)]
 
         def short(texts):
             return [vector(*([1.0] * 8))]
@@ -237,11 +416,33 @@ class RefreshTests(unittest.TestCase):
             ariadne_embed_cache.refresh(notes, {}, 0, short)
 
     def test_work_done_before_a_failure_is_kept_in_the_cache(self):
-        notes = [{"path": f"/v/n{i}.md", "hash": "h", "text": f"note {i}"} for i in range(10)]
+        notes = [{"path": f"/v/n{i}.md", "hash": "h", "chunks": [f"note {i}"]} for i in range(10)]
         cached = {}
         with self.assertRaises(ariadne_embed_cache.EmbedUnavailable):
             ariadne_embed_cache.refresh(notes, cached, 0, counting_embedder(fail_after=6), batch_size=3)
         self.assertEqual(len(cached), 6)
+
+    def test_a_note_half_embedded_when_the_server_dies_is_not_cached(self):
+        """A half-note would be stored under the note's real hash, so it is never
+        re-embedded: every later score against it uses a centroid of half the note."""
+        notes = [
+            {"path": f"/v/n{i}.md", "hash": "h", "chunks": [f"n{i}-a", f"n{i}-b", f"n{i}-c"]}
+            for i in range(4)
+        ]
+        cached = {}
+        with self.assertRaises(ariadne_embed_cache.EmbedUnavailable):
+            ariadne_embed_cache.refresh(notes, cached, 0, counting_embedder(fail_after=5), batch_size=2)
+        self.assertEqual(list(cached), [("/v/n0.md", "h")])
+        self.assertEqual(len(cached[("/v/n0.md", "h")]), 4)  # centroid + 3 chunks, never a stub
+
+    def test_a_note_spanning_several_batches_is_embedded_whole(self):
+        notes = [{"path": "/v/a.md", "hash": "h", "chunks": [f"c{i}" for i in range(7)]}]
+        cached = {}
+        dims, embedded = ariadne_embed_cache.refresh(
+            notes, cached, 0, counting_embedder(), batch_size=2
+        )
+        self.assertEqual(len(cached[("/v/a.md", "h")]), 8)
+        self.assertEqual(embedded, 1, "the count is notes, not chunks")
 
 
 class NonFiniteEmbeddingTests(unittest.TestCase):

@@ -8,6 +8,7 @@ executed. No vault is touched and nothing leaves the machine.
 """
 
 import contextlib
+import io
 import json
 import os
 import socket
@@ -221,6 +222,41 @@ class SafeUrlTests(unittest.TestCase):
 
     def test_control_characters_are_stripped(self):
         self.assertNotIn("\x1b", ariadne_embed_client.safe_url("http://host/v1\x1b[31m"))
+
+
+class AnnounceTests(unittest.TestCase):
+    """The tool's only egress must always say what is leaving, before it leaves."""
+
+    def announce(self, pending):
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            ariadne_embed_client.announce("/v", "http://localhost:11434/v1", "m", pending)
+        return stderr.getvalue()
+
+    def test_the_volume_is_stated_not_just_the_note_count(self):
+        """One note can be dozens of requests and hundreds of KB, and --max-refresh
+        counts notes -- so the note count alone no longer describes the upload."""
+        out = self.announce([{"chunks": ["x" * 1024] * 20}, {"chunks": ["y" * 1024]}])
+        self.assertIn("2 note(s)", out)
+        self.assertIn("21 chunk(s)", out)
+        self.assertIn("21 KB", out)
+
+    def test_the_destination_is_named_without_credentials(self):
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            ariadne_embed_client.announce(
+                "/v", "http://user:secret@127.0.0.1:11434/v1", "m", [{"chunks": ["a"]}]
+            )
+        self.assertNotIn("secret", stderr.getvalue())
+        self.assertIn("127.0.0.1:11434", stderr.getvalue())
+
+    def test_control_characters_in_the_model_name_are_stripped(self):
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            ariadne_embed_client.announce(
+                "/v", "http://localhost:11434/v1", "ev\x1b[31mil", [{"chunks": ["a"]}]
+            )
+        self.assertNotIn("\x1b", stderr.getvalue())
 
 
 class ErrorTextTests(unittest.TestCase):

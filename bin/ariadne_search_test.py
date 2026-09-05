@@ -7,6 +7,7 @@ hash, so two notes with the same words land on the same vector.
 """
 
 import io
+import math
 import os
 import sys
 import tempfile
@@ -16,6 +17,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ariadne_common
+import ariadne_embed_cache
 import ariadne_search
 import ariadne_similar_report
 from ariadne_similar_testkit import ariadne_similar, fake_embedder, notes_and_cache, write_vault
@@ -76,6 +78,26 @@ class RankByClusterTests(unittest.TestCase):
         )
         hit_names = {h["name"] for g in groups for h in g["hits"]}
         self.assertEqual(hit_names, {notes[1]["name"]})
+
+
+class WholeNoteScoringTests(unittest.TestCase):
+    """A phrase has no sections, so each note is scored as one vector: its centroid."""
+
+    def test_a_note_is_scored_by_its_centroid_not_its_best_chunk(self):
+        notes, _ = notes_and_cache({"long.md": DATABASES + GARDENING})
+        key = (notes[0]["path"], notes[0]["hash"])
+        query_vec = vec_for(DATABASES)
+        entry = ariadne_embed_cache.note_entry([vec_for(GARDENING), vec_for(DATABASES)])
+        groups = ariadne_search.rank_by_cluster(
+            query_vec, notes, {key: entry}, {}, per_cluster=3, limit=10
+        )
+        score = groups[0]["hits"][0]["score"]
+        self.assertLess(score, 1.0)
+        self.assertAlmostEqual(
+            score,
+            round(math.sumprod(query_vec, ariadne_embed_cache.note_vector(entry)), 4),
+            places=4,
+        )
 
 
 class ReportTests(unittest.TestCase):

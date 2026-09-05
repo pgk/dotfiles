@@ -8,6 +8,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -224,11 +225,22 @@ class ExcludeMatchingTests(unittest.TestCase):
         self.assertNotIn("\x1b", stderr.getvalue())
 
     def test_an_excluded_directory_is_not_walked_at_all(self):
-        # Pruning, not filtering: the point of --exclude is that the subtree is
-        # never read, so an unreadable note inside it must not even be opened.
-        self.assertEqual(
-            self.kept(["skip"], {"keep.md": "", "skip/deep/x.md": ""}), ["keep.md"]
-        )
+        """Pruning, not filtering. Asserted on the walk itself: the yielded file list
+        looks identical either way, so it cannot tell pruning from a per-file filter."""
+        with tempfile.TemporaryDirectory() as tmp:
+            write_vault(tmp, {"keep.md": "", "skip/deep/x.md": ""})
+            visited = []
+            real_walk = os.walk
+
+            def spy(top, *args, **kwargs):
+                for root, dirs, files in real_walk(top, *args, **kwargs):
+                    visited.append(root)
+                    yield root, dirs, files
+
+            with mock.patch.object(ariadne_common.os, "walk", spy):
+                kept = list(ariadne_common.iter_markdown_files(tmp, ["skip"]))
+        self.assertEqual([os.path.relpath(p, tmp) for p in kept], ["keep.md"])
+        self.assertEqual([os.path.relpath(r, tmp) for r in visited], ["."])
 
     def test_a_file_pattern_still_matches_only_that_file(self):
         self.assertEqual(

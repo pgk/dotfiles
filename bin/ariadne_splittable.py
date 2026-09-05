@@ -15,7 +15,7 @@ import ariadne_common
 # [ \t]+, not \s+: \s crosses newlines, so a blank "## " line would otherwise
 # consume the following blank line and capture the next paragraph as its title.
 HEADER_RE = re.compile(r"^#{2,}[ \t]+(.+?)[ \t]*$", re.MULTILINE)
-FENCE_RE = re.compile(r"^```.*?^```", re.MULTILINE | re.DOTALL)
+FENCE_RE = ariadne_common.FENCE_RE
 
 
 def note_stats(path, raw, name_index, files):

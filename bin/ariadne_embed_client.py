@@ -68,11 +68,18 @@ def validate_endpoint(endpoint, allow_remote):
         )
 
 
-def announce(vault, endpoint, model, count):
-    """Never embed without saying what is being sent where — this is the tool's only egress."""
+def announce(vault, endpoint, model, pending):
+    """Never embed without saying what is being sent where — this is the tool's only egress.
+
+    Notes are chunked, so the note count no longer implies the volume: one note
+    can be dozens of requests and hundreds of kilobytes. Both are stated,
+    because --max-refresh bounds the notes and nothing bounds the rest.
+    """
+    chunks = [text for note in pending for text in note["chunks"]]
+    kb = sum(len(text.encode("utf-8")) for text in chunks) / 1024
     print(
-        f"ariadne-similar: sending {count} note(s) from {vault} to {safe_url(endpoint)} "
-        f"({ariadne_common.printable(model)})",
+        f"ariadne-similar: sending {len(pending)} note(s) as {len(chunks)} chunk(s), {kb:.0f} KB, "
+        f"from {vault} to {safe_url(endpoint)} ({ariadne_common.printable(model)})",
         file=sys.stderr,
     )
 

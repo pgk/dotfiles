@@ -10,6 +10,7 @@ inputs, no need to mock the pipeline around it.
 
 import math
 
+import ariadne_embed_cache
 import ariadne_similar_report
 
 DEFAULT_PER_CLUSTER = 3
@@ -24,10 +25,12 @@ def rank_by_cluster(query_vec, notes, cached, clusters, *, per_cluster, limit):
     """
     by_cluster = {}
     for note in notes:
-        vec = cached.get((note["path"], note["hash"]))
-        if vec is None:
+        entry = cached.get((note["path"], note["hash"]))
+        if not entry:
             continue
-        score = round(math.sumprod(query_vec, vec), 4)
+        # A typed phrase has no sections of its own, so this is one vector against
+        # each note as a whole -- see ariadne_embed_cache.best_chunk_match.
+        score = round(math.sumprod(query_vec, ariadne_embed_cache.note_vector(entry)), 4)
         cluster = clusters.get(note["path"])
         by_cluster.setdefault(cluster, []).append(
             {"name": note["name"], "path": note["path"], "score": score, "cluster": cluster}

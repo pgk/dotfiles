@@ -8,6 +8,7 @@ live in ariadne_embed_cache_test.py and ariadne_embed_client_test.py.
 """
 
 import json
+import math
 import os
 import sys
 import tempfile
@@ -16,55 +17,13 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ariadne_common
 import ariadne_embed_cache
+import ariadne_note_text
 import ariadne_similar_report
 from ariadne_similar_testkit import (
     fake_embedder,
     ariadne_similar,
     write_vault,
 )
-
-
-class NoteTextTests(unittest.TestCase):
-    def test_frontmatter_is_stripped_and_name_prepended(self):
-        text = ariadne_similar.note_text("my-note", "---\ntitle: X\ntags:\n  - a\n---\nThe body.\n")
-        self.assertEqual(text, "my-note\n\nThe body.")
-
-    def test_note_without_frontmatter_keeps_its_body(self):
-        self.assertEqual(ariadne_similar.note_text("n", "Just text.\n"), "n\n\nJust text.")
-
-    def test_frontmatter_only_note_yields_just_the_name(self):
-        self.assertEqual(ariadne_similar.note_text("n", "---\ntitle: X\n---\n"), "n")
-
-    def test_unterminated_frontmatter_is_left_alone(self):
-        self.assertEqual(ariadne_similar.note_text("n", "---\ntitle: X\n"), "n\n\n---\ntitle: X")
-
-    def test_wikilinks_embed_as_the_words_a_reader_sees(self):
-        """Brackets and slugs would otherwise spend the embedding budget."""
-        text = ariadne_similar.note_text("n", "Builds on [[Working Memory]] and ![[dir/chunking|chunk size]].")
-        self.assertEqual(text, "n\n\nBuilds on Working Memory and chunk size.")
-
-    def test_hash_ignores_a_link_being_rewritten_to_the_same_words(self):
-        a = ariadne_similar.note_text("n", "Builds on [[Working Memory]].")
-        b = ariadne_similar.note_text("n", "Builds on [[working-memory|Working Memory]].")
-        self.assertEqual(ariadne_similar.content_hash(a), ariadne_similar.content_hash(b))
-
-    def test_long_note_is_truncated(self):
-        text = ariadne_similar.note_text("n", "x" * (ariadne_similar.MAX_CHARS * 2))
-        self.assertEqual(len(text), ariadne_similar.MAX_CHARS)
-
-    def test_hash_ignores_frontmatter_only_edits(self):
-        a = ariadne_similar.note_text("n", "---\ntags: [one]\n---\nBody.\n")
-        b = ariadne_similar.note_text("n", "---\ntags: [two]\n---\nBody.\n")
-        self.assertEqual(ariadne_similar.content_hash(a), ariadne_similar.content_hash(b))
-
-    def test_hash_changes_when_body_changes(self):
-        a = ariadne_similar.note_text("n", "Body one.")
-        b = ariadne_similar.note_text("n", "Body two.")
-        self.assertNotEqual(ariadne_similar.content_hash(a), ariadne_similar.content_hash(b))
-
-    def test_preview_skips_headings_and_blank_lines(self):
-        text = ariadne_similar.note_text("n", "# Heading\n\n\nReal first line.\n")
-        self.assertEqual(ariadne_similar.preview_of(text), "Real first line.")
 
 
 class ScanVaultTests(unittest.TestCase):
@@ -80,13 +39,27 @@ class ScanVaultTests(unittest.TestCase):
         self.assertEqual(by_name["a"]["links"], ["b", "c"])
         self.assertEqual(
             by_name["a"]["hash"],
-            ariadne_similar.content_hash(ariadne_similar.note_text("a", "Links to [[b]] and [[c]].")),
+            ariadne_note_text.content_hash(ariadne_note_text.note_chunks("a", "Links to [[b]] and [[c]].")),
         )
         self.assertNotEqual(by_name["a"]["hash"], by_name["b"]["hash"])
 
     def test_excludes_are_honoured(self):
         notes = self.scan({"a.md": "a", "skip/b.md": "b"}, excludes=["skip/*"])
         self.assertEqual([n["name"] for n in notes], ["a"])
+
+    def test_a_note_carries_the_chunks_that_will_be_embedded(self):
+        raw = "## Alpha\n" + "a" * 900 + "\n\n## Beta\n" + "b" * 900 + "\n"
+        notes = self.scan({"long.md": raw, "short.md": "Body."})
+        by_name = {n["name"]: n for n in notes}
+        self.assertEqual(by_name["long"]["chunks"], ariadne_note_text.note_chunks("long", raw))
+        self.assertEqual(by_name["short"]["chunks"], ["short\n\nBody."])
+
+    def test_the_preview_comes_from_the_first_chunk(self):
+        """A multi-chunk note, so 'first' is distinguishable from 'last'."""
+        raw = "## Opening\n\nFirst real line.\n" + "a " * 500 + "\n\n## Later\n\nA different line.\n" + "b " * 500
+        notes = self.scan({"a.md": raw})
+        self.assertGreater(len(notes[0]["chunks"]), 1)
+        self.assertEqual(notes[0]["preview"], "First real line.")
 
 
 class FindSimilarTests(unittest.TestCase):
@@ -120,6 +93,49 @@ class FindSimilarTests(unittest.TestCase):
         )
         self.assertEqual([r["name"] for r in results], ["close", "far"])
         self.assertGreater(results[0]["score"], results[1]["score"])
+
+    def setup_pair(self):
+        """A target and one candidate, with the vectors of both under the test's control."""
+        _, notes, name_index, cached = self.prepare({"target.md": "alpha beta", "other.md": "gamma delta"})
+        by_name = {n["name"]: n for n in notes}
+        target, other = by_name["target"], by_name["other"]
+        keys = ((target["path"], target["hash"]), (other["path"], other["hash"]))
+
+        def score():
+            return ariadne_similar.find_similar(
+                target, notes, cached, name_index, 10, False
+            )[0]["score"]
+
+        return notes, cached, keys, score
+
+    def test_the_target_may_match_on_any_one_of_its_sections(self):
+        """One section lining up is a real hit, even if the rest of the note does not."""
+        _, cached, (target_key, other_key), score = self.setup_pair()
+        other_vec = ariadne_embed_cache.note_vector(cached[other_key])
+        unrelated = fake_embedder()(["nothing at all in common"])[0]
+
+        cached[target_key] = ariadne_embed_cache.note_entry([unrelated, other_vec])
+        self.assertEqual(score(), 1.0)
+        # The same content averaged into one chunk loses the match.
+        cached[target_key] = ariadne_embed_cache.note_entry(
+            [ariadne_embed_cache.centroid([unrelated, other_vec])]
+        )
+        self.assertLess(score(), 1.0)
+
+    def test_a_candidate_is_scored_as_a_whole_note_not_by_its_best_section(self):
+        """Taking the max on both sides makes a note with many chunks a magnet."""
+        _, cached, (target_key, other_key), score = self.setup_pair()
+        target_vec = ariadne_embed_cache.note_vector(cached[target_key])
+        unrelated = fake_embedder()(["nothing at all in common"])[0]
+        chunks = [target_vec, unrelated]
+
+        cached[other_key] = ariadne_embed_cache.note_entry(chunks)
+        self.assertLess(score(), 1.0)
+        self.assertAlmostEqual(
+            score(),
+            round(math.sumprod(target_vec, ariadne_embed_cache.centroid(chunks)), 4),
+            places=4,
+        )
 
     def test_forward_linked_notes_are_excluded_by_default(self):
         files = {"a.md": "shared words here [[b]]", "b.md": "shared words here", "c.md": "shared words here"}

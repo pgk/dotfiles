@@ -13,13 +13,23 @@ without asking above `TITLE_MIN` title similarity. Between the two is a
 question for a human, and on a real vault that band is the wide part.
 
 Both numbers are borrowed calibration, not a measurement of this vault. They
-are flags on `ariadne-similar --duplicates` so they can be re-tuned here.
+are flags on `ariadne-similar --duplicates` so they can be re-tuned here. They
+also predate chunking: a note under the chunking threshold still has exactly the
+vector they were taken against, so only long-note pairs moved.
+
+A note is compared as one vector -- the centroid of its chunks -- not
+chunk-by-chunk. "Did I write this twice" is a question about whole notes, and
+one vector per note is also what keeps the scan quadratic in notes rather than
+in chunks: it is every-pair with no index structure, 48s for 4.6M pairs at 3040
+notes and 768 dims, measured against a real cache, which is why this is its own
+mode and not something a query pays for.
 """
 
 import difflib
 import heapq
 import math
 
+import ariadne_embed_cache
 import ariadne_similar_report
 
 EMBED_MIN = 0.80
@@ -36,10 +46,8 @@ def title_similarity(a, b):
 def find_duplicates(notes, cached, *, embed_min=EMBED_MIN, title_min=TITLE_MIN, limit=MAX_DUPLICATES):
     """Split the over-`embed_min` pairs into confirmed duplicates and the noisy band.
 
-    Quadratic with no index structure: 48s for 4.6M pairs at 3040 notes and 768
-    dims, measured against a real cache — which is why this is its own mode and
-    not something a query pays for. Notes with no cached embedding are skipped rather
-    than embedded; the caller decides whether to refresh first.
+    Notes with no cached embedding are skipped rather than embedded; the caller
+    decides whether to refresh first.
 
     Both output lists are bounded while scanning, not afterwards: at `embed_min`
     0 every pair qualifies, and materialising all of them is gigabytes on a vault
@@ -48,9 +56,9 @@ def find_duplicates(notes, cached, *, embed_min=EMBED_MIN, title_min=TITLE_MIN, 
     """
     embedded = []
     for note in notes:
-        vec = cached.get((note["path"], note["hash"]))
-        if vec is not None:
-            embedded.append((note["name"], note["path"], vec))
+        entry = cached.get((note["path"], note["hash"]))
+        if entry:
+            embedded.append((note["name"], note["path"], ariadne_embed_cache.note_vector(entry)))
     embedded.sort(key=lambda e: e[1])
 
     duplicates, duplicate_total = [], 0

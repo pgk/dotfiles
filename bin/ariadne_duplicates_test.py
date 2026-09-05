@@ -7,6 +7,7 @@ hash, so two notes with the same words land on the same vector.
 """
 
 import io
+import math
 import os
 import sys
 import tempfile
@@ -16,6 +17,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ariadne_duplicates
+import ariadne_embed_cache
 import ariadne_similar_report
 from ariadne_similar_testkit import ariadne_similar, fake_embedder, notes_and_cache, write_vault
 
@@ -102,6 +104,33 @@ class FindDuplicatesTests(unittest.TestCase):
         cached.pop((notes[0]["path"], notes[0]["hash"]))
         found = ariadne_duplicates.find_duplicates(notes, cached)
         self.assertEqual((found["duplicate_total"], found["possible_total"]), (0, 0))
+
+    def test_a_note_is_compared_as_a_whole_not_by_its_best_section(self):
+        """Two notes sharing one section are neighbours, not the same note twice.
+
+        Max-over-chunks -- what a query uses -- would score that pair 1.0 and
+        call it a duplicate; the centroid keeps the rest of both notes in view.
+        """
+        notes, _ = notes_and_cache({"a.md": SAME_IDEA, "b.md": SAME_IDEA})
+        shared, a_only, b_only = (
+            fake_embedder(dims=64)([SAME_IDEA, "alpha beta gamma", "delta epsilon zeta"])
+        )
+        cached = {
+            (notes[0]["path"], notes[0]["hash"]): ariadne_embed_cache.note_entry([shared, a_only]),
+            (notes[1]["path"], notes[1]["hash"]): ariadne_embed_cache.note_entry([shared, b_only]),
+        }
+        found = ariadne_duplicates.find_duplicates(notes, cached, embed_min=0.0, title_min=0.0)
+        self.assertEqual(len(found["duplicates"]), 1)
+        self.assertLess(found["duplicates"][0]["score"], 1.0)
+
+    def test_a_single_chunk_note_scores_exactly_as_it_did_before_chunking(self):
+        notes, cached = notes_and_cache({"satisficing.md": SAME_IDEA, "satisficing-1.md": SAME_IDEA})
+        self.assertEqual([len(entry) for entry in cached.values()], [1, 1])
+        vectors = [ariadne_embed_cache.note_vector(entry) for entry in cached.values()]
+        found = ariadne_duplicates.find_duplicates(notes, cached)
+        self.assertAlmostEqual(
+            found["duplicates"][0]["score"], round(math.sumprod(*vectors), 4), places=4
+        )
 
     def test_an_empty_vault_reports_nothing(self):
         found = ariadne_duplicates.find_duplicates([], {})

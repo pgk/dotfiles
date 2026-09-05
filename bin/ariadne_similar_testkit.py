@@ -58,17 +58,19 @@ def fake_embedder(dims=16, calls=None):
 def notes_and_cache(files):
     """(notes, cached) for a vault built from `files`, fully embedded.
 
+    `cached` maps a note to a cache entry -- its centroid then its chunks, which
+    is one vector for every note short enough not to be split.
+
     The vault directory is gone by the time this returns -- fine for callers
     that only use note["path"] as a dict key, not for one that reads from disk.
     """
     with tempfile.TemporaryDirectory() as root:
         write_vault(root, files)
         notes = ariadne_similar.scan_vault(root, [])
-    cached = {}
     embed = fake_embedder(dims=64)
-    for note, vector in zip(notes, embed([n["text"] for n in notes])):
-        cached[(note["path"], note["hash"])] = vector
-    return notes, cached
+    return notes, {
+        (n["path"], n["hash"]): ariadne_embed_cache.note_entry(embed(n["chunks"])) for n in notes
+    }
 
 
 def closed_port():

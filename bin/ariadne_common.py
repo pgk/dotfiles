@@ -5,6 +5,10 @@ import os
 import re
 import sys
 
+# A ``` block holds code, not prose: a `## ` line inside one is sample text, not
+# a section of the note. Shared so the two tools that must not be fooled by it
+# -- splittable detection and chunking -- cannot drift apart.
+FENCE_RE = re.compile(r"^```.*?^```", re.MULTILINE | re.DOTALL)
 WIKILINK_RE = re.compile(r"\[\[([^\]|]+)")
 # The whole span, brackets included, for rewriting rather than harvesting links.
 WIKILINK_SPAN_RE = re.compile(r"!?\[\[([^\[\]]*)\]\]")
