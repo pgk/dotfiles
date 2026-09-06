@@ -27,6 +27,7 @@ return {
     local duplicates = require("plugins.ariadne.duplicates")
     local delete = require("plugins.ariadne.delete")
     local branch = require("plugins.ariadne.branch")
+    local place = require("plugins.ariadne.place")
     local activity = require("plugins.ariadne.activity")
 
     -- Setup all modules
@@ -42,6 +43,7 @@ return {
     duplicates.setup()
     delete.setup()
     branch.setup()
+    place.setup()
     activity.setup()
 
     -- Set up path settings and mappings for markdown
@@ -104,6 +106,7 @@ return {
     vim.keymap.set("v", "<leader>oQ", ":<C-u>AriadneSearchSelection<cr>", { desc = "Ariadne similar to selection" })
     vim.keymap.set("n", "<leader>oB", "<cmd>AriadneBranch<cr>", { desc = "Ariadne branch note (1a -> 1a1)" })
     vim.keymap.set("n", "<leader>oN", "<cmd>AriadneSibling<cr>", { desc = "Ariadne sibling note (1a -> 1b)" })
+    vim.keymap.set("n", "<leader>oP", "<cmd>AriadnePlace<cr>", { desc = "Ariadne place note in the hierarchy" })
     vim.keymap.set("n", "<leader>ou", "<cmd>AriadneDuplicates<cr>", { desc = "Ariadne duplicate notes" })
     vim.keymap.set("n", "<leader>oa", "<cmd>AriadneActive<cr>", { desc = "Ariadne recently active notes" })
     vim.keymap.set("n", "<leader>oX", "<cmd>AriadneDelete<cr>", { desc = "Ariadne delete note (to .trash/)" })

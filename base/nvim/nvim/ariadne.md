@@ -36,6 +36,7 @@ it owns the vault plumbing and the `:Obsidian <subcommand>` form.
 | `<leader>oX` | `:AriadneDelete` | Delete the current note, checking what links to it |
 | `<leader>oB` | `:AriadneBranch` | New note one level deeper (`1a` → `1a1`) |
 | `<leader>oN` | `:AriadneSibling` | New note at the same level (`1a` → `1b`) |
+| `<leader>oP` | `:AriadnePlace` | Find where an id-less note belongs, then rename it into that slot |
 
 ### In Markdown Files
 
@@ -80,6 +81,7 @@ it owns the vault plumbing and the `:Obsidian <subcommand>` form.
 | `:AriadneDelete` | Move the current note to `.trash/`, asking first if anything links to it |
 | `:AriadneBranch` | Branch off the current note, one level deeper |
 | `:AriadneSibling` | Continue the current note's line, at the same level |
+| `:AriadnePlace` | Find where the current id-less note fits in the hierarchy, then rename it there (picker) |
 
 ## Links Panel
 
@@ -451,6 +453,60 @@ branch off the note before it. The parent is never modified.
 
 A note outside the scheme — `hub-note`, `2026-09-02` — has no id to branch
 from, and both commands say so and stop rather than inventing one.
+
+## Placing a Note
+
+`:AriadneBranch` and `:AriadneSibling` start from a note that is already in the
+sequence. `<leader>oP` / `:AriadnePlace` is for the other direction — a note you
+wrote without an id, sitting outside the hierarchy, that ought to be somewhere in
+it.
+
+The id grammar cannot answer where. It can say what a child of `1a2` is called;
+it cannot say that this note is one. So the question is put to
+`ariadne-similar`, the same way `<leader>oS` asks what a note is near, and the
+answer is narrowed to the neighbours whose *own* names carry an id — because
+only those name a place. Each becomes two rows:
+
+```
+Place>                 placing loose-note-on-memory -- 2 of the 34 nearest notes carry an id
+0.6522  1a2b     child of    1a2 Working memory limits      1a2 Working memory limits.md
+0.6522  1a3      sibling of  1a2 Working memory limits      1a2 Working memory limits.md
+0.4747  1a2a1    child of    1a2a Chunking recall           1a2a Chunking recall.md
+------  1        new top-level sequence
+```
+
+A **child** elaborates the note it sits under; a **sibling** continues that
+note's line. Nothing in the id can tell those apart, so both are offered and you
+pick. The id shown is the one you would actually get — already walked past
+everything taken, which is why the child of `1a2` above is `1a2b` and not `1a2a`.
+A slot appears once however many neighbours lead to it. The last row is always
+there: a note that belongs under nothing still belongs at the top level.
+
+Choosing a row prompts for the title, prefilled with the note's current name, and
+then renames through the same machinery as `<leader>oR` — so every `[[link]]`
+pointing at the old name is retargeted, in every form. The note also **moves**,
+into its new parent's directory, for the same reason a branched note is created
+there: it joins the sequence it was placed in. The top-level row has no parent to
+join, so it renames where it stands. When two neighbours in the same line lead to
+the same free id, only the higher-ranked row is offered — and since the row names
+the note you are filing next to, that row is also the directory you get.
+
+Finally, the note gains a line at the top, exactly as a branched note does:
+
+```
+Branched from [[1a2 Working memory limits]]
+```
+
+For the same reason, too — the id *implies* the relationship, but
+`:AriadneGraphHealth` counts wikilinks, so without it a freshly placed note is
+still an orphan. Unlike `:AriadneBranch` this is conditional: a note you are
+placing is not new and may already point at its parent, so when the row was
+marked `[linked]` the body is left alone. A sibling says `Continues`.
+
+Two things it refuses. A note that already has an id — use `:AriadneBranch` or
+`:AriadneSibling` from it instead. And a ranking is only as good as what it read:
+the CLI reads the note off disk, so with unsaved changes you are told the
+placement answers the saved version, and it goes ahead.
 
 ## Deleting a Note
 

@@ -33,6 +33,7 @@ thin Lua layer that wires their `--json` output into fzf-lua pickers.
 | `duplicates.lua` | Near-duplicate notes, on embedding *and* title similarity (`:AriadneDuplicates`) |
 | `delete.lua` | Move the current note to `.trash/`, gating on what links to it (`:AriadneDelete`) |
 | `branch.lua` | Next note in a Folgezettel sequence (`:AriadneBranch` / `:AriadneSibling`) |
+| `place.lua` | Where an id-less note belongs in the hierarchy, then rename it there (`:AriadnePlace`) |
 | `folgezettel.lua` | The id grammar: parse, child, sibling, next free |
 | `wikilinks.lua` | Parsing and rewriting `[[links]]` — resolution keys, display text, unwrapping |
 | `activity.lua` | Recently touched notes, grouped by link community (`:AriadneActive`) |
@@ -49,5 +50,5 @@ nvim --headless \
   -c "PlenaryBustedFile base/nvim/nvim/lua/plugins/ariadne/utils_spec.lua"
 ```
 
-Swap the filename for `anniversary_spec.lua` to run the other suite. See
+Swap the filename for any other `*_spec.lua` to run that suite. See
 `CLAUDE.md` for what each covers and what is still untested.

@@ -128,7 +128,16 @@ function M.write(path)
     vim.notify("Could not resolve the destination path", vim.log.levels.WARN)
     return false
   end
-  vim.cmd.write({ args = { path } })
+  -- pcall, because a write can fail for reasons the path check cannot see -- a
+  -- destination directory that has gone away throws E212. It used to propagate,
+  -- and `place.lua` calls this from an fzf-lua action, where the traceback lands
+  -- on the user instead of the message. Returning false keeps the contract the
+  -- docstring already claims.
+  local ok, err = pcall(vim.cmd.write, { args = { path } })
+  if not ok then
+    vim.notify("Could not write " .. M.sanitize(path) .. ": " .. M.sanitize(err), vim.log.levels.ERROR)
+    return false
+  end
   return true
 end
 
@@ -187,7 +196,11 @@ function M.vault_child(name, base)
   if type(name) ~= "string" or name == "" then
     return nil
   end
-  base = base or M.vault_path
+  -- Normalized first: the containment test below compares against `base .. "/"`,
+  -- so a base carrying a trailing slash never matched its own normalized output
+  -- and every name was refused. Not reachable from `:h`, but `M.vault_path` is
+  -- whatever obsidian.nvim was configured with.
+  base = vim.fs.normalize(base or M.vault_path)
   local path = vim.fs.normalize(base .. "/" .. name .. ".md")
   if not vim.startswith(path, base .. "/") then
     return nil

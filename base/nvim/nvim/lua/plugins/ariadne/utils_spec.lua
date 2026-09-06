@@ -203,6 +203,50 @@ describe("utils.sanitize", function()
   end)
 end)
 
+describe("utils.vault_child", function()
+  -- The guarded join: it builds a path out of untrusted text -- a [[link]], or a
+  -- name typed at a prompt -- so what it must refuse is the point of it.
+  local dir
+
+  before_each(function()
+    dir = vim.fn.tempname()
+    vim.fn.mkdir(dir, "p")
+    _G.Obsidian = { dir = dir }
+  end)
+
+  after_each(function()
+    _G.Obsidian = nil
+  end)
+
+  it("joins a name onto the vault", function()
+    assert.equals(dir .. "/note.md", utils.vault_child("note"))
+  end)
+
+  it("refuses a name that climbs out", function()
+    assert.is_nil(utils.vault_child("../../etc/passwd"))
+    assert.is_nil(utils.vault_child("sub/../../escaped"))
+  end)
+
+  it("joins onto a given base, and contains within it", function()
+    assert.equals(dir .. "/seq/note.md", utils.vault_child("note", dir .. "/seq"))
+    assert.is_nil(utils.vault_child("../note", dir .. "/seq"))
+  end)
+
+  it("accepts a base carrying a trailing slash", function()
+    -- The containment test compares against `base .. "/"`, so an unnormalized
+    -- base never matched its own normalized output and every name was refused.
+    -- `:h` never yields one, but M.vault_path is whatever obsidian.nvim holds.
+    assert.equals(dir .. "/seq/note.md", utils.vault_child("note", dir .. "/seq/"))
+    _G.Obsidian = { dir = dir .. "/" }
+    assert.equals(dir .. "/note.md", utils.vault_child("note"))
+  end)
+
+  it("refuses an empty or non-string name", function()
+    assert.is_nil(utils.vault_child(""))
+    assert.is_nil(utils.vault_child(nil))
+  end)
+end)
+
 describe("utils.write", function()
   local notified
 

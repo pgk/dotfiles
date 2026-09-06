@@ -118,6 +118,18 @@ links panel, and the `formatexpr` that stops `gw` breaking a `[[wiki link]]`
 across lines. `utils.resolve` also resolves the *parent* when the file itself is
 not on disk, so a new note in an unwritten buffer still counts as inside.
 
+`utils.vault_child(name, base)` contains a *name* within its `base`; it does
+not check the base. That is the caller's job, and it is a real obligation, not
+paperwork: `branch.lua` discharges it from a path already through `in_vault`,
+but `place.lua` builds its base from a note path arriving in `ariadne-similar`'s
+JSON, so it calls `in_vault` on that path first. Without it the guard rests
+entirely on a property of *another process* — `ariadne_common.iter_markdown_files`
+realpath-checks every note it yields, so a path outside the vault cannot come
+back today — and what rests on it is a write followed by deleting the original.
+A relative base is enough to break it: `vault_child("x", "rel")` returns
+`rel/x.md`, which lands under nvim's cwd. Found by review; pinned by
+`place_spec.lua`.
+
 `commands.smart_follow_link` is the one place that correctly does not use it. It
 compares a path it just built from `utils.vault_path` against `utils.vault_path`,
 so both sides are unresolved and consistent, and a symlinked vault does not
@@ -142,6 +154,82 @@ Two decisions worth knowing before touching it:
   note's link back to its parent is the only thing telling `ariadne-graph`
   they are related. A branched note with no link is an orphan by that
   measure, the id alone does not count.
+- `branch.taken_ids()` is that scan, and `place.lua` shares it rather than
+  copying it. Two scans that agree today are two scans, and only one of them
+  gets edited.
+- **`place.lua` answers a question the grammar cannot.** `folgezettel.lua` can
+  say what a child of `1a2` is called; nothing in it can say that *this* note is
+  one. So `:AriadnePlace` asks `ariadne-similar` instead and keeps only the
+  neighbours whose own names parse as an id. Three decisions in it:
+  - It sends `--all --no-bridge -n 50`, which is **not** `:AriadneSimilar`'s
+    query. Bridge-first ordering deliberately promotes the structurally novel
+    pair (see `ariadne_ranking._bridged`), and a parent should be the *nearest*
+    note, not the most surprising one. A note already linked to its natural
+    parent is the common case here rather than one to filter out, so it is
+    marked `[linked]` instead of dropped. The limit is wide because the id
+    filter is invisible to the ranking: in the vault this command exists for,
+    most notes have no id, so a default ten can be ten notes naming no place.
+  - Rows are deduplicated **by proposed id**. `sibling of 1a1` and `sibling of
+    1a2` both walk to the first free id in the 1a line, and the losing row would
+    name a parent the result does not sit next to.
+  - The id grammar cannot distinguish "elaborates" from "continues", so both a
+    child and a sibling row are offered per neighbour and the wording carries
+    the difference. Don't collapse them to one.
+  - **A placed note gets the parent link too, but conditionally.** The invariant
+    two bullets up applies here exactly as it does to `branch.lua`: the id
+    implies the relationship, `ariadne-graph` counts wikilinks, so a placed note
+    with no edge to its parent is an orphan by the measure that matters. It is
+    conditional because a note being *placed* is not new — it may already
+    reference its parent, and the ranking already said so. `linked` in the
+    payload covers either direction, so a parent linking *to* the note counts:
+    the edge exists and a second one adds nothing. The wording follows
+    `branch.lua`'s — "Branched from" for a child, "Continues" for a sibling.
+    Without this the two commands contradicted each other, which is how review
+    found it.
+  - `taken_ids` is read after the async round trip but still before the picker
+    and the blocking title prompt, so a note claiming that id in *another*
+    directory in the interim would give two notes one id (`commands.rename`
+    catches a collision only in the destination directory). Left as is
+    deliberately: `branch.lua` has the identical window by the same
+    ids-on-disk-are-the-truth design, and closing it here alone would cost a
+    second full-vault `find` per placement to cover seconds of a single-user
+    editor.
+
+The async guard in `apply` compares the buffer's **name**, not its handle.
+`nvim_win_get_buf(win) ~= buf` only proves the same buffer is displayed, and
+`:saveas` / `:file` rename a buffer while keeping its handle — so both handle
+checks passed while `commands.rename` destroyed a different file than the one
+the ranking, the id and the title prefill all described, with no warning. It
+also subsumes "the note gained an id while the picker was open": gaining one
+means being renamed, and a name still equal to `origin.path` has a stem
+`refusal` already cleared. Don't add a second id check for that — it is
+unreachable, which a test written for it quietly demonstrated by passing on the
+name check instead.
+
+## Renaming: write before you retarget
+
+`commands.rename` writes the destination **before** rewriting the vault's links
+at it, and the order is load-bearing. The write is the step that can still fail
+— a destination directory that has gone away throws E212 — and it used to run
+last, so a failure left the original note in place with every `[[link]]` to it
+already pointing at a name that did not exist: a vault-wide dead-link event with
+no rollback. `update_frontmatter_id` has to precede the write, because
+`utils.write` writes the *buffer*. `commands_spec.lua` pins it, and that test
+is the one that caught the ordering being silently reverted during review.
+
+`utils.write` returns false rather than letting a failed write propagate: E212
+is thrown for a destination directory that has gone away, and `place.lua` calls
+this from an fzf-lua action, where a traceback lands on the user instead of a
+message. `utils.vault_child` also normalizes its `base` — the containment test
+compares against `base .. "/"`, so a base with a trailing slash never matched
+its own normalized output and refused every name. Not reachable through `:h`,
+but `M.vault_path` is whatever `obsidian.nvim` was configured with. Both are
+pinned in `utils_spec.lua`, which now covers `vault_child` at all.
+
+`rename` also builds its destination with `utils.vault_child`, not a
+concatenation. It previously concatenated, so `:AriadneRename ../../elsewhere`
+placed the note outside the directory being renamed in — and rename deletes the
+original, so nothing was left behind.
 
 ## Lua tests
 
@@ -180,6 +268,18 @@ starts with the vault path.
 `branch_spec.lua` drives both commands against tempdir vaults with the title
 prompt stubbed, covering id allocation, the parent link, the subdirectory
 placement, and each refusal.
+
+`commands_spec.lua` covers `commands.rename`, which had no coverage until it
+grew a destination directory: the move, the escape refusal, the existing-target
+refusal, and the write-before-retarget ordering above.
+
+`place_spec.lua` drives `:AriadnePlace` end to end against tempdir vaults —
+argv, the row set, id allocation, the dedupe, the move beside the parent, the
+link retarget, and each refusal. It stubs `vim.system` **only** for
+`ariadne-similar`: the `find` and `grep` beneath `branch.taken_ids` and
+`commands.rename` go through to the real one, because which ids are taken and
+what links at the note are the two things the command must get right, and a stub
+there would only assert the fixture back at itself.
 
 `wikilinks_spec.lua` pins the link grammar — resolution keys, display text and
 unwrapping — against the path, anchor, alias and embed forms. `delete_spec.lua`

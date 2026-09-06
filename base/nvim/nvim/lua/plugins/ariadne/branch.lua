@@ -6,7 +6,10 @@ local M = {}
 
 -- Every id already in use, lowercased. Read from filenames rather than from an
 -- index, so a note created outside the editor still reserves its number.
-local function taken_ids()
+--
+-- Exported because `place.lua` allocates ids too, and one scan with one reason
+-- written down beats two that agree until one of them is edited.
+function M.taken_ids()
   local taken = {}
   for _, path in ipairs(utils.list_note_files()) do
     local id = folgezettel.split(utils.get_note_name(path))
@@ -42,7 +45,7 @@ function M.create(kind)
     return
   end
 
-  local new_id = folgezettel.first_free(spec.first(id), taken_ids())
+  local new_id = folgezettel.first_free(spec.first(id), M.taken_ids())
   local title = vim.trim(vim.fn.input(new_id .. " "))
   if title == "" then
     vim.notify("Cancelled", vim.log.levels.INFO)

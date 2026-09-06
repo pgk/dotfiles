@@ -94,11 +94,17 @@ local function update_frontmatter_id(old_name, new_name)
   end
 end
 
-function M.rename(new_name)
+-- `opts.dir` renames the note into another directory instead of the one it is
+-- in: :AriadnePlace files a note beside the sequence it was just placed in, the
+-- same rule branch.lua follows for a note it creates. Returns whether the note
+-- was renamed: `place.lua` writes the parent link only on a true, and a write
+-- can fail (see `utils.write`), so this is a real gate rather than decoration.
+function M.rename(new_name, opts)
+  opts = opts or {}
   local current_file = vim.api.nvim_buf_get_name(0)
   if not current_file:match("%.md$") then
     vim.notify("Not a markdown file", vim.log.levels.ERROR)
-    return
+    return false
   end
 
   local old_name = vim.fn.fnamemodify(current_file, ":t:r")
@@ -107,17 +113,23 @@ function M.rename(new_name)
     new_name = vim.fn.input("New name: ", old_name)
     if new_name == "" or new_name == old_name then
       vim.notify("Rename cancelled", vim.log.levels.INFO)
-      return
+      return false
     end
   end
 
-  -- New file path
-  local new_file = vim.fn.fnamemodify(current_file, ":h") .. "/" .. new_name .. ".md"
+  -- vault_child, not a concatenation: `new_name` came from a prompt, so
+  -- `../../elsewhere` used to place the note outside the directory being renamed
+  -- in -- and rename deletes the original, so there was no copy left behind.
+  local new_file = utils.vault_child(new_name, opts.dir or vim.fn.fnamemodify(current_file, ":h"))
+  if not new_file then
+    vim.notify("Name escapes its destination directory: " .. utils.sanitize(new_name), vim.log.levels.WARN)
+    return false
+  end
 
   -- Check if target exists
   if vim.fn.filereadable(new_file) == 1 then
-    vim.notify("File already exists: " .. new_name, vim.log.levels.ERROR)
-    return
+    vim.notify("File already exists: " .. utils.sanitize(new_name), vim.log.levels.ERROR)
+    return false
   end
 
   -- Find all files that link to the old name (case-insensitive)
@@ -126,6 +138,20 @@ function M.rename(new_name)
   local files_to_update = utils.grep_note_files(old_name, { ignorecase = true })
   vim.notify("Found " .. #files_to_update .. " files with links", vim.log.levels.INFO)
 
+  -- The destination is written BEFORE anything else is retargeted at it, and the
+  -- order is load-bearing: the write is the step that can still fail (a
+  -- destination directory that has gone away throws E212), and it used to run
+  -- last. A failure there left the original note in place with every [[link]] in
+  -- the vault already pointing at a name that did not exist -- a vault-wide dead
+  -- link event, with no rollback. Now a failed write costs nothing but the
+  -- frontmatter edit sitting unsaved in the buffer.
+  --
+  -- The frontmatter goes first because `utils.write` writes the *buffer*.
+  update_frontmatter_id(old_name, new_name)
+  if not utils.write(new_file) then
+    return false
+  end
+
   local updated_count = 0
   for _, filepath in ipairs(files_to_update) do
     if rewrite_links(filepath, old_name, new_name) then
@@ -133,18 +159,16 @@ function M.rename(new_name)
     end
   end
 
-  update_frontmatter_id(old_name, new_name)
-
-  -- Rename the file
-  if not utils.write(new_file) then
-    return
-  end
   vim.fn.delete(current_file)
   vim.bo.modified = false
   utils.edit(new_file)
   vim.cmd("bdelete! #")
 
-  vim.notify("Renamed to " .. new_name .. ", updated " .. updated_count .. " files", vim.log.levels.INFO)
+  vim.notify(
+    "Renamed to " .. utils.sanitize(new_name) .. ", updated " .. updated_count .. " files",
+    vim.log.levels.INFO
+  )
+  return true
 end
 
 -- Extract selection to new note
