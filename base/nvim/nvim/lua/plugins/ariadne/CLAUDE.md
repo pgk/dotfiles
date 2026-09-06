@@ -231,6 +231,33 @@ concatenation. It previously concatenated, so `:AriadneRename ../../elsewhere`
 placed the note outside the directory being renamed in — and rename deletes the
 original, so nothing was left behind.
 
+## Keymaps
+
+All 23 live under `<leader>o` and are grouped by intent: `n`ew, `f`ind, `l`inks
+(this note's edges), `g`raph (the whole vault). Three stay flat — `oR` rename,
+`oX` delete, `oh` help — the two irreversible ones deliberately off the group
+prefixes, where a slip inside a group cannot reach them.
+
+The group letter is an **insertion**, not a replacement: `ol` → `oll`, `oD` →
+`ogd`, `ou` → `ogu`. That was the point of the layout chosen — the keystroke
+carrying the meaning stays put, so the reorganization cost one habit rather than
+23. What it retires is the case-sensitive pairs (`os`/`oS`, `oq`/`oQ`, `ob`/`oB`,
+`od`/`oD`), where the shift key had been doing a namespace's job.
+
+Two rules, both pinned by `keymaps_spec.lua` because both fail *silently*:
+
+- **No mapping may be a prefix of another.** A complete mapping that also
+  prefixes a longer one makes nvim wait out `timeoutlen` before firing it — a
+  one-second hang on a keystroke that used to be instant, with nothing on screen
+  to explain it. `<leader>on` was `:Obsidian new`, which is what forced the
+  grouping to rehome it rather than adding `<leader>onp` behind it.
+- **Every visual mapping uses `:<C-u>`, never `<cmd>`.** See "Opening and
+  writing paths" and the comment in `init.lua`; a `<cmd>` visual mapping reads
+  the *previous* selection.
+
+`ariadne.md` carries the same tables for the reader. A stale key there is not
+caught by any test — cross-check it against `init.lua` when you touch either.
+
 ## Lua tests
 
 `utils_spec.lua` covers `utils.sanitize` and `utils.edit` — the two helpers standing
@@ -268,6 +295,10 @@ starts with the vault path.
 `branch_spec.lua` drives both commands against tempdir vaults with the title
 prompt stubbed, covering id allocation, the parent link, the subdirectory
 placement, and each refusal.
+
+`keymaps_spec.lua` reads `init.lua` as source (the mappings sit inside a
+lazy.nvim `config` function that would need the real plugin to load) and pins the
+two silent failures above, plus that no command is mapped twice.
 
 `commands_spec.lua` covers `commands.rename`, which had no coverage until it
 grew a destination directory: the move, the escape refusal, the existing-target

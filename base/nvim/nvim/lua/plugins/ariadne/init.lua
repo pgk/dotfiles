@@ -70,14 +70,41 @@ return {
       end,
     })
 
-    -- Global keybindings
-    vim.keymap.set("n", "<leader>od", "<cmd>AriadneDaily<cr>", { desc = "Ariadne daily note" })
-    vim.keymap.set("n", "<leader>or", "<cmd>AriadneRandom<cr>", { desc = "Ariadne random note" })
-    vim.keymap.set("n", "<leader>ol", "<cmd>AriadneLinksPanel<cr>", { desc = "Ariadne links panel" })
-    vim.keymap.set("n", "<leader>os", "<cmd>Obsidian search<cr>", { desc = "Ariadne search" })
-    vim.keymap.set("n", "<leader>on", "<cmd>Obsidian new<cr>", { desc = "Ariadne new note" })
-    vim.keymap.set("n", "<leader>oi", "<cmd>AriadneInsertLink<cr>", { desc = "Ariadne insert link" })
-    vim.keymap.set("n", "<leader>ob", function()
+    -- Global keybindings, grouped by what you are trying to do: `n`ew, `f`ind,
+    -- `l`inks (this note's edges) and `g`raph (the whole vault). The group letter
+    -- is an insertion rather than a replacement -- `ol` -> `oll`, `oD` -> `ogd`,
+    -- `ou` -> `ogu` -- so the keystroke that carries the meaning is mostly the
+    -- one it always was. What the grouping is actually for is retiring the
+    -- case-sensitive pairs (`os`/`oS`, `oq`/`oQ`, `ob`/`oB`, `od`/`oD`), where the
+    -- shift key was doing the work of a namespace.
+
+    -- n: bring a note into existence.
+    vim.keymap.set("n", "<leader>onn", "<cmd>Obsidian new<cr>", { desc = "Ariadne new note" })
+    vim.keymap.set("n", "<leader>ond", "<cmd>AriadneDaily<cr>", { desc = "Ariadne daily note" })
+    vim.keymap.set("n", "<leader>onb", "<cmd>AriadneBranch<cr>", { desc = "Ariadne branch note (1a -> 1a1)" })
+    vim.keymap.set("n", "<leader>ons", "<cmd>AriadneSibling<cr>", { desc = "Ariadne sibling note (1a -> 1b)" })
+    vim.keymap.set("n", "<leader>onp", "<cmd>AriadnePlace<cr>", { desc = "Ariadne place note in the hierarchy" })
+    -- Same `:<C-u>` reason as <leader>ofp below. This one was a pre-existing bug:
+    -- as a `<cmd>` mapping it extracted the previously selected text into the
+    -- new note, and refused outright on a buffer's first selection.
+    vim.keymap.set("v", "<leader>one", ":<C-u>AriadneExtract<cr>", { desc = "Ariadne extract to note" })
+
+    -- f: find a note.
+    vim.keymap.set("n", "<leader>off", "<cmd>Obsidian search<cr>", { desc = "Ariadne search (fulltext)" })
+    vim.keymap.set("n", "<leader>ofq", "<cmd>AriadneSearch<cr>", { desc = "Ariadne semantic search" })
+    -- `:<C-u>` and not `<cmd>`: `<cmd>` does not leave Visual mode, and nvim only
+    -- writes the '< / '> marks on exit from it -- so a `<cmd>` mapping reads the
+    -- PREVIOUS selection, and reads nothing at all the first time a buffer is
+    -- selected in. Verified: with line 2 selected, a `<cmd>`-fired command sees
+    -- line 1. The `<C-u>` clears the '<,'> range nvim inserts for us, which this
+    -- command does not use -- it reads the marks itself, to keep the columns.
+    vim.keymap.set("v", "<leader>ofp", ":<C-u>AriadneSearchSelection<cr>", { desc = "Ariadne similar to selection" })
+    vim.keymap.set("n", "<leader>ofs", "<cmd>AriadneSimilar<cr>", { desc = "Ariadne similar unlinked notes" })
+    vim.keymap.set("n", "<leader>ofr", "<cmd>AriadneRandom<cr>", { desc = "Ariadne random note" })
+
+    -- l: this note's own edges.
+    vim.keymap.set("n", "<leader>oll", "<cmd>AriadneLinksPanel<cr>", { desc = "Ariadne links panel" })
+    vim.keymap.set("n", "<leader>olb", function()
       local current_file = vim.api.nvim_buf_get_name(0)
       local backlinks = utils.get_backlinks(current_file)
       if #backlinks == 0 then
@@ -86,29 +113,19 @@ return {
       end
       vim.cmd("Obsidian backlinks")
     end, { desc = "Ariadne backlinks (picker)" })
-    vim.keymap.set("n", "<leader>of", "<cmd>Obsidian links<cr>", { desc = "Ariadne forward links (picker)" })
-    vim.keymap.set("n", "<leader>ot", "<cmd>AriadneTransclusionToggle<cr>", { desc = "Ariadne toggle transclusions" })
+    vim.keymap.set("n", "<leader>olf", "<cmd>Obsidian links<cr>", { desc = "Ariadne forward links (picker)" })
+    vim.keymap.set("n", "<leader>oli", "<cmd>AriadneInsertLink<cr>", { desc = "Ariadne insert link" })
+    vim.keymap.set("n", "<leader>olt", "<cmd>AriadneTransclusionToggle<cr>", { desc = "Ariadne toggle transclusions" })
+
+    -- g: the whole vault, not the note in front of you.
+    vim.keymap.set("n", "<leader>ogg", "<cmd>AriadneGraphHealth<cr>", { desc = "Ariadne orphan/sparse/splittable notes" })
+    vim.keymap.set("n", "<leader>ogd", "<cmd>AriadneDeadLinks<cr>", { desc = "Ariadne dead links" })
+    vim.keymap.set("n", "<leader>ogu", "<cmd>AriadneDuplicates<cr>", { desc = "Ariadne duplicate notes" })
+    vim.keymap.set("n", "<leader>oga", "<cmd>AriadneActive<cr>", { desc = "Ariadne recently active notes" })
+
+    -- Flat, and deliberately so: the two irreversible ones sit off the group
+    -- prefixes, where a slip inside a group cannot reach them, and help is meta.
     vim.keymap.set("n", "<leader>oR", "<cmd>AriadneRename<cr>", { desc = "Ariadne rename note" })
-    -- Same `:<C-u>` reason as <leader>oQ below. This one is a pre-existing bug:
-    -- as a `<cmd>` mapping it extracted the previously selected text into the
-    -- new note, and refused outright on a buffer's first selection.
-    vim.keymap.set("v", "<leader>oe", ":<C-u>AriadneExtract<cr>", { desc = "Ariadne extract to note" })
-    vim.keymap.set("n", "<leader>og", "<cmd>AriadneGraphHealth<cr>", { desc = "Ariadne orphan/sparse/splittable notes" })
-    vim.keymap.set("n", "<leader>oD", "<cmd>AriadneDeadLinks<cr>", { desc = "Ariadne dead links" })
-    vim.keymap.set("n", "<leader>oS", "<cmd>AriadneSimilar<cr>", { desc = "Ariadne similar unlinked notes" })
-    vim.keymap.set("n", "<leader>oq", "<cmd>AriadneSearch<cr>", { desc = "Ariadne semantic search" })
-    -- `:<C-u>` and not `<cmd>`: `<cmd>` does not leave Visual mode, and nvim only
-    -- writes the '< / '> marks on exit from it -- so a `<cmd>` mapping reads the
-    -- PREVIOUS selection, and reads nothing at all the first time a buffer is
-    -- selected in. Verified: with line 2 selected, a `<cmd>`-fired command sees
-    -- line 1. The `<C-u>` clears the '<,'> range nvim inserts for us, which this
-    -- command does not use -- it reads the marks itself, to keep the columns.
-    vim.keymap.set("v", "<leader>oQ", ":<C-u>AriadneSearchSelection<cr>", { desc = "Ariadne similar to selection" })
-    vim.keymap.set("n", "<leader>oB", "<cmd>AriadneBranch<cr>", { desc = "Ariadne branch note (1a -> 1a1)" })
-    vim.keymap.set("n", "<leader>oN", "<cmd>AriadneSibling<cr>", { desc = "Ariadne sibling note (1a -> 1b)" })
-    vim.keymap.set("n", "<leader>oP", "<cmd>AriadnePlace<cr>", { desc = "Ariadne place note in the hierarchy" })
-    vim.keymap.set("n", "<leader>ou", "<cmd>AriadneDuplicates<cr>", { desc = "Ariadne duplicate notes" })
-    vim.keymap.set("n", "<leader>oa", "<cmd>AriadneActive<cr>", { desc = "Ariadne recently active notes" })
     vim.keymap.set("n", "<leader>oX", "<cmd>AriadneDelete<cr>", { desc = "Ariadne delete note (to .trash/)" })
     vim.keymap.set("n", "<leader>oh", "<cmd>AriadneHelp<cr>", { desc = "Ariadne help (workflow doc)" })
   end,

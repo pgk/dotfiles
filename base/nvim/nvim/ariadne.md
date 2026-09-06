@@ -13,30 +13,62 @@ it owns the vault plumbing and the `:Obsidian <subcommand>` form.
 
 ### Global (available anywhere after startup)
 
+Grouped by what you are trying to do. The group letter is an *insertion*, not a
+replacement — `<leader>oll` became `<leader>oll`, `<leader>ogd` became
+`<leader>ogd` — so the keystroke carrying the meaning is mostly the one it always
+was. What the grouping retires is the case-sensitive pairs, where the shift key
+was doing the work of a namespace.
+
+**`n` — new: bring a note into existence**
+
 | Key | Command | Description |
-|-----|---------|-------------|
-| `<leader>od` | `:AriadneDaily` | Open today's daily note (with template) |
-| `<leader>or` | `:AriadneRandom` | Open a random note |
-| `<leader>ol` | `:AriadneLinksPanel` | Toggle links panel sidebar |
-| `<leader>os` | `:Obsidian search` | Search vault (fulltext) |
-| `<leader>on` | `:Obsidian new` | Create a new note |
-| `<leader>oi` | `:AriadneInsertLink` | Search vault and insert link at cursor |
-| `<leader>ob` | `:Obsidian backlinks` | Backlinks in picker |
-| `<leader>of` | `:Obsidian links` | Forward links in picker |
-| `<leader>ot` | `:AriadneTransclusionToggle` | Toggle transclusion rendering |
+|---|---|---|
+| `<leader>onn` | `:Obsidian new` | Create a new note |
+| `<leader>ond` | `:AriadneDaily` | Open today's daily note (with template) |
+| `<leader>onb` | `:AriadneBranch` | New note one level deeper (`1a` → `1a1`) |
+| `<leader>ons` | `:AriadneSibling` | New note at the same level (`1a` → `1b`) |
+| `<leader>onp` | `:AriadnePlace` | Find where an id-less note belongs, then rename it |
+| `<leader>one` | `:AriadneExtract` | (visual) Extract the selection to a new note |
+
+**`f` — find: locate a note**
+
+| Key | Command | Description |
+|---|---|---|
+| `<leader>off` | `:Obsidian search` | Search vault (fulltext) |
+| `<leader>ofq` | `:AriadneSearch` | Semantic search by phrase, grouped by cluster |
+| `<leader>ofp` | `:AriadneSearchSelection` | (visual) Find notes similar to the selected passage |
+| `<leader>ofs` | `:AriadneSimilar` | Find semantically similar but unlinked notes |
+| `<leader>ofr` | `:AriadneRandom` | Open a random note |
+
+**`l` — links: this note's own edges**
+
+| Key | Command | Description |
+|---|---|---|
+| `<leader>oll` | `:AriadneLinksPanel` | Toggle links panel sidebar |
+| `<leader>olb` | `:Obsidian backlinks` | Backlinks in picker |
+| `<leader>olf` | `:Obsidian links` | Forward links in picker |
+| `<leader>oli` | `:AriadneInsertLink` | Search vault and insert link at cursor |
+| `<leader>olt` | `:AriadneTransclusionToggle` | Toggle transclusion rendering |
+
+**`g` — graph: the whole vault, not the note in front of you**
+
+| Key | Command | Description |
+|---|---|---|
+| `<leader>ogg` | `:AriadneGraphHealth` | Find orphans, sparse notes, splittable notes, and clusters with no hub |
+| `<leader>ogd` | `:AriadneDeadLinks` | Find dead links and possible matches |
+| `<leader>ogu` | `:AriadneDuplicates` | Find duplicate and near-duplicate notes |
+| `<leader>oga` | `:AriadneActive` | Notes touched recently, grouped by link community |
+
+**Flat — rare, irreversible, or meta**
+
+These stay off the group prefixes deliberately: a slip inside a group cannot
+reach the two that destroy or rewrite a note.
+
+| Key | Command | Description |
+|---|---|---|
 | `<leader>oR` | `:AriadneRename` | Rename note and update all links |
-| `<leader>og` | `:AriadneGraphHealth` | Find orphans, sparse notes, splittable notes, and clusters with no hub |
-| `<leader>oa` | `:AriadneActive` | Notes touched recently, grouped by link community |
-| `<leader>oh` | `:AriadneHelp` | Open this doc |
-| `<leader>oD` | `:AriadneDeadLinks` | Find dead links and possible matches |
-| `<leader>oS` | `:AriadneSimilar` | Find semantically similar but unlinked notes |
-| `<leader>oq` | `:AriadneSearch` | Semantic search by phrase, grouped by cluster |
-| `<leader>oQ` | `:AriadneSearchSelection` | (visual) Find notes similar to the selected passage |
-| `<leader>ou` | `:AriadneDuplicates` | Find duplicate and near-duplicate notes |
 | `<leader>oX` | `:AriadneDelete` | Delete the current note, checking what links to it |
-| `<leader>oB` | `:AriadneBranch` | New note one level deeper (`1a` → `1a1`) |
-| `<leader>oN` | `:AriadneSibling` | New note at the same level (`1a` → `1b`) |
-| `<leader>oP` | `:AriadnePlace` | Find where an id-less note belongs, then rename it into that slot |
+| `<leader>oh` | `:AriadneHelp` | Open this doc |
 
 ### In Markdown Files
 
@@ -85,7 +117,7 @@ it owns the vault plumbing and the `:Obsidian <subcommand>` form.
 
 ## Links Panel
 
-The links panel (`<leader>ol`) shows a sidebar with:
+The links panel (`<leader>oll`) shows a sidebar with:
 
 - **Forward Links**: Notes linked from the current note, with preview text
 - **Backlinks**: Notes that link to the current note, with context
@@ -133,9 +165,9 @@ Three ways in, each answering a different question:
   Absent if `ariadne-graph` is not on `PATH` (you get a warning instead).
 
 Workflow:
-1. `<leader>od` - Open/create today's note
+1. `<leader>ond` - Open/create today's note
 2. Review the random notes, add thoughts
-3. Use `<leader>oi` to insert links to related notes
+3. Use `<leader>oli` to insert links to related notes
 
 ## Renaming Notes
 
@@ -146,7 +178,7 @@ Use `<leader>oR` or `:AriadneRename` to rename the current note:
 
 ## Graph Health
 
-Use `<leader>og` or `:AriadneGraphHealth` to find structural problems in the
+Use `<leader>ogg` or `:AriadneGraphHealth` to find structural problems in the
 vault, at two levels:
 - Backed by the `ariadne-graph` CLI tool (`bin/ariadne-graph` in dotfiles). It reads
   only the link graph and note text — no embedding server, no network, no LLM
@@ -184,7 +216,7 @@ is why nothing here is named that way any more.
 
 ## Recent Activity
 
-Use `<leader>oa` or `:AriadneActive` to see what you have actually been working on.
+Use `<leader>oga` or `:AriadneActive` to see what you have actually been working on.
 Where graph health is an audit you run occasionally, this is a daily view:
 
 - Backed by `ariadne-graph --since` (`ariadne-graph ~/notes --since 7d`). Takes a window
@@ -206,7 +238,7 @@ window fills with notes you did not touch. Check with
 
 ## Dead Links
 
-Use `<leader>oD` or `:AriadneDeadLinks` to find `[[wikilinks]]` that don't resolve
+Use `<leader>ogd` or `:AriadneDeadLinks` to find `[[wikilinks]]` that don't resolve
 to any note:
 - Backed by the `ariadne-deadlinks` CLI tool (`bin/ariadne-deadlinks` in dotfiles)
 - Each dead link is shown with up to 3 fuzzy-matched candidate note names (or "no
@@ -217,7 +249,7 @@ to any note:
 
 ## Similar Notes
 
-Use `<leader>oS` or `:AriadneSimilar` to find notes that are *about* the same
+Use `<leader>ofs` or `:AriadneSimilar` to find notes that are *about* the same
 thing as the current one but aren't linked to it — the connection you meant to
 make and forgot. Where `:AriadneGraphHealth` finds notes with too few links and
 `:AriadneDeadLinks` finds links pointing nowhere, this finds the links that were
@@ -328,7 +360,7 @@ embeddings are unavailable and does nothing. The rest of the workflow is unaffec
 
 ## Similar to a Selection
 
-Select a paragraph in visual mode and press `<leader>oQ` (or run
+Select a paragraph in visual mode and press `<leader>ofp` (or run
 `:'<,'>AriadneSearchSelection`) to find notes about *that passage* rather than
 about the whole note you are sitting in.
 
@@ -362,7 +394,7 @@ that happens to contain it.
 
 ## Semantic Search
 
-Use `<leader>oq` or `:AriadneSearch [phrase]` to find notes *about* something
+Use `<leader>ofq` or `:AriadneSearch [phrase]` to find notes *about* something
 you can describe but can't name a note for — the same "find the note I
 half-remember" job as `:AriadneSimilar`, except the thing to compare against
 is a typed phrase instead of an existing note. With no argument it prompts;
@@ -390,7 +422,7 @@ is a typed phrase instead of an existing note. With no argument it prompts;
 
 ## Duplicates
 
-Use `<leader>ou` or `:AriadneDuplicates` to find the same note written twice.
+Use `<leader>ogu` or `:AriadneDuplicates` to find the same note written twice.
 It reuses the same embedding index as `:AriadneSimilar`, but asks a different
 question, and it needs **two** signals to answer it:
 
@@ -431,8 +463,8 @@ written. An id alternates digits and letters by depth, so `1` → `1a` → `1a1`
 
 | From `1a Note title` | | |
 |---|---|---|
-| `<leader>oB` | `:AriadneBranch` | `1a1 <your title>` — a branch off this note |
-| `<leader>oN` | `:AriadneSibling` | `1b <your title>` — the same line continuing |
+| `<leader>onb` | `:AriadneBranch` | `1a1 <your title>` — a branch off this note |
+| `<leader>ons` | `:AriadneSibling` | `1b <your title>` — the same line continuing |
 
 You are prompted for the title only; the id is worked out for you. It is always
 the next **free** one, checked against every note in the vault, so branching off
@@ -457,13 +489,13 @@ from, and both commands say so and stop rather than inventing one.
 ## Placing a Note
 
 `:AriadneBranch` and `:AriadneSibling` start from a note that is already in the
-sequence. `<leader>oP` / `:AriadnePlace` is for the other direction — a note you
+sequence. `<leader>onp` / `:AriadnePlace` is for the other direction — a note you
 wrote without an id, sitting outside the hierarchy, that ought to be somewhere in
 it.
 
 The id grammar cannot answer where. It can say what a child of `1a2` is called;
 it cannot say that this note is one. So the question is put to
-`ariadne-similar`, the same way `<leader>oS` asks what a note is near, and the
+`ariadne-similar`, the same way `<leader>ofs` asks what a note is near, and the
 answer is narrowed to the neighbours whose *own* names carry an id — because
 only those name a place. Each becomes two rows:
 
@@ -539,22 +571,22 @@ while `[[a-note-elsewhere]]` and a bare mention in prose do not.
 
 ## Quick Capture Workflow
 
-1. `<leader>on` - Create a new note
+1. `<leader>onn` - Create a new note
 2. Write your content
 3. Use `[[` to link to existing notes (completion available)
-4. Or use `<leader>oi` to search and insert links
+4. Or use `<leader>oli` to search and insert links
 
 ## Navigation Workflow
 
 1. Open any note
-2. `<leader>ol` - Open links panel to see connections
+2. `<leader>oll` - Open links panel to see connections
 3. `<C-w>l` - Focus the panel
 4. Navigate to a link, press `<CR>` to open
 5. `gf` on any `[[link]]` in the main editor to follow
 
 ## Transclusion
 
-Use `![[note-name]]` syntax to embed another note's content. Toggle rendering with `<leader>ot`.
+Use `![[note-name]]` syntax to embed another note's content. Toggle rendering with `<leader>olt`.
 
 When enabled, transclusions render as:
 ```
