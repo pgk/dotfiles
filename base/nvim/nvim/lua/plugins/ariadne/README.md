@@ -36,6 +36,7 @@ thin Lua layer that wires their `--json` output into fzf-lua pickers.
 | `place.lua` | Where an id-less note belongs in the hierarchy, then rename it there (`:AriadnePlace`) |
 | `folgezettel.lua` | The id grammar: parse, child, sibling, next free |
 | `wikilinks.lua` | Parsing and rewriting `[[links]]` — resolution keys, display text, unwrapping |
+| `selection.lua` | The `'<` / `'>` marks: the selected text, and the byte range covering it |
 | `activity.lua` | Recently touched notes, grouped by link community (`:AriadneActive`) |
 
 `dev-vault/` is a permanent synthetic fixture — never the real vault — used

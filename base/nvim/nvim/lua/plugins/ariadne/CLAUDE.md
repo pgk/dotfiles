@@ -289,6 +289,33 @@ confirm gate, cancellation, the unwrap, the `.trash/` collision suffix and every
 refusal. Those two are the only command-level Lua coverage in the directory;
 the pickers remain untested.
 
+## The visual selection
+
+`selection.lua` reads the `'<` / `'>` marks and nothing else. It offers the text
+(`visual_selection`), the byte range (`visual_range`), and the text *for* a range
+(`text_in`) — and `visual_selection` is built from the other two, going through
+`nvim_buf_get_text`, so the text and the range can never describe different
+regions. That matters because `commands.extract_note` needs both: it writes the
+text into a new note and replaces exactly that span with a link.
+
+Two things the range has to get right, both pinned in `selection_spec.lua`:
+
+- **`'>` reports `v:maxcol` for a linewise `V` selection**, not a column, so it
+  is clamped to the line.
+- **`'>` points at the FIRST byte of the last selected character.** The range
+  therefore extends to the end of that character (`vim.str_utf_end`). Without
+  it, a multi-byte tail is cut in half — a mangled string on the text side, and
+  invalid UTF-8 written into the buffer on the `nvim_buf_set_text` side.
+
+`extract_note` was broken for exactly this reason and nobody noticed: when
+`selection.lua` was split out of it, the four range locals were left behind in
+`commands.lua` as undefined globals, so `:AriadneExtract` threw
+`attempt to perform arithmetic on global 'start_line'` on **every** run — after
+the new note had already been written, so it left a note behind and no link.
+The lesson is the one the split should have applied: extracting the *text* from
+a function that also used the *range* leaves the range with no owner. It has
+one now.
+
 ## Opening and writing paths
 
 `vim.cmd("edit " .. fnameescape(path))` is banned here — `fnameescape` does not

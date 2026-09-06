@@ -171,13 +171,20 @@ function M.rename(new_name, opts)
   return true
 end
 
--- Extract selection to new note
+-- Extract selection to new note.
+--
+-- The range is taken once and used for both halves: `selection.lua` was split
+-- out of this function and the four range locals were left behind here,
+-- undefined, so the replace step threw on every run -- after the new note had
+-- already been written. Read the range, not just the text, or the two can
+-- describe different regions.
 function M.extract_note()
-  local selected_text = selection.visual_selection()
-  if not selected_text then
+  local range = selection.visual_range()
+  if not range then
     vim.notify("No text selected", vim.log.levels.WARN)
     return
   end
+  local selected_text = selection.text_in(0, range)
 
   -- Prompt for note name
   local note_name = vim.fn.input("New note name: ")
@@ -206,11 +213,15 @@ function M.extract_note()
   file:write(selected_text .. "\n")
   file:close()
 
-  -- Replace selection with link
-  local link = "[[" .. note_name .. "]]"
-  vim.api.nvim_buf_set_text(0, start_line - 1, start_col - 1, end_line - 1, end_col, { link })
+  -- Replace selection with link. as_wikilink rather than bare brackets: a name
+  -- containing `]]` would close the link early and forge one to a note the
+  -- writer never referenced.
+  vim.api.nvim_buf_set_text(
+    0, range.start_row, range.start_col, range.end_row, range.end_col,
+    { utils.as_wikilink(note_name) }
+  )
 
-  vim.notify("Extracted to: " .. note_name, vim.log.levels.INFO)
+  vim.notify("Extracted to: " .. utils.sanitize(note_name), vim.log.levels.INFO)
 end
 
 -- Smart follow link - works even when cursor is on [[ or ]]
