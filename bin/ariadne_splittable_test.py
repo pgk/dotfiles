@@ -29,6 +29,23 @@ def write_vault(root, files):
 
 
 class NoteStatsTests(unittest.TestCase):
+    def test_backlinks_block_adds_no_heading_no_words_and_no_out_degree(self):
+        # Both halves matter: the block's `## Backlinks` heading would push notes
+        # toward the split gate, and its links would make a much-linked-to note
+        # look like an index and veto it from the report.
+        name_index = {"a": "/v/a.md", "b": "/v/b.md"}
+        files = {"/v/n.md", "/v/a.md", "/v/b.md"}
+        raw = (
+            "one two three\n\n"
+            "<!-- ariadne:backlinks -->\n## Backlinks\n\n- [[a]]\n- [[b]]\n"
+            "<!-- /ariadne:backlinks -->\n"
+        )
+        stats = ariadne_splittable.note_stats("/v/n.md", raw, name_index, files)
+        self.assertEqual(stats["headers"], [])
+        self.assertEqual(stats["words"], 3)
+        self.assertEqual(stats["out_degree"], 0)
+
+
     def test_word_count_excludes_frontmatter(self):
         raw = "---\ntitle: X\ntags: [a, b, c]\n---\none two three four five\n"
         stats = ariadne_splittable.note_stats("/v/n.md", raw, {}, set())

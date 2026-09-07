@@ -1,4 +1,5 @@
 -- Deleting the current note, with a gate on the links that would break.
+local backlinks = require("plugins.ariadne.backlinks")
 local utils = require("plugins.ariadne.utils")
 local wikilinks = require("plugins.ariadne.wikilinks")
 
@@ -9,31 +10,6 @@ local sanitize = utils.sanitize
 local resolved = utils.resolve
 local TRASH = ".trash"
 local LISTED = 8
-
--- Notes that link to `name`, resolved exactly.
---
--- grep is only a prefilter, and it searches for the bare name rather than
--- `[[name` so that `[[dir/name]]` and a differently-cased `[[Name]]` are still
--- offered up — `utils.get_backlinks` searches the bracketed prefix and misses
--- both, which is survivable for a sidebar and not for a delete. Every candidate
--- is then re-checked with the real resolution rules, so prose mentions and
--- `[[name-of-something-else]]` fall out again.
-local function linking_notes(path, name)
-  local found = {}
-  for _, candidate in ipairs(utils.grep_note_files(name, { ignorecase = true })) do
-    if resolved(candidate) ~= path then
-      local text = utils.read_note(candidate)
-      local count = text and wikilinks.count_to(text, name) or 0
-      if count > 0 then
-        table.insert(found, { path = candidate, name = utils.get_note_name(candidate), count = count })
-      end
-    end
-  end
-  table.sort(found, function(a, b)
-    return a.name:lower() < b.name:lower()
-  end)
-  return found
-end
 
 local function describe_links(linked)
   local total = 0
@@ -69,12 +45,37 @@ local function trash_path(vault, basename)
   return candidate
 end
 
+-- Unwrap only outside the managed backlinks blocks. The gate above counted
+-- authored links, so unwrapping the whole text rewrote rows the gate never
+-- warned about and reported more links than it had promised -- and an unwrapped
+-- row (`- deleted-note`) is no longer a row, so the next `:AriadneBacklinks`
+-- absorbed the corpse as an annotation of whichever row preceded it. A stale row
+-- left alone is invisible to every tool and disappears on that refresh instead.
+local function unwrap_authored(text, name)
+  local lines = vim.split(text, "\n", { plain = true })
+  local masked = {}
+  for _, block in ipairs(backlinks.spans(lines)) do
+    for i = block[1], block[2] do
+      masked[i] = true
+    end
+  end
+  local total = 0
+  for i, line in ipairs(lines) do
+    if not masked[i] then
+      local rewritten, n = wikilinks.unwrap(line, name)
+      lines[i] = rewritten
+      total = total + n
+    end
+  end
+  return table.concat(lines, "\n"), total
+end
+
 local function unwrap_in(linked, name)
   local notes, links = 0, 0
   for _, entry in ipairs(linked) do
     local text = utils.read_note(entry.path)
     if text then
-      local rewritten, n = wikilinks.unwrap(text, name)
+      local rewritten, n = unwrap_authored(text, name)
       if n > 0 and rewritten ~= text then
         local out = io.open(entry.path, "w")
         if out then
@@ -120,7 +121,12 @@ function M.delete()
   end
 
   local name = utils.get_note_name(path)
-  local linked = linking_notes(path, name)
+  -- `backlinks.linking_notes` is the exact resolver this and the links panel
+  -- share: grep as a prefilter on the bare name, then the real resolution rules
+  -- on each candidate's authored text. Both the prompt below and the unwrap that
+  -- follows depend on that exactness, which is why neither can use a
+  -- bracket-prefix match.
+  local linked = backlinks.linking_notes(path, name)
   local summary, total = describe_links(linked)
   if #linked > 0 then
     local prompt = string.format("Delete '%s'?\n\n%s", sanitize(name), summary)

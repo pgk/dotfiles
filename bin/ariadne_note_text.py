@@ -50,8 +50,13 @@ def note_body(raw):
 
     `[[Working Memory]]` is two words of meaning wrapped in punctuation, and
     embedding the punctuation spends the model's budget on brackets and slugs.
+
+    The backlinks block goes too, and not only because a list of note names is
+    noise in a vector: content_hash is taken over these chunks, so a block left
+    in would re-embed the note every time its backlinks were refreshed.
     """
-    return ariadne_common.wikilink_display(ariadne_common.strip_frontmatter(raw)).strip()
+    authored = ariadne_common.strip_backlinks_block(raw)
+    return ariadne_common.wikilink_display(ariadne_common.strip_frontmatter(authored)).strip()
 
 
 def _headed(name, text):

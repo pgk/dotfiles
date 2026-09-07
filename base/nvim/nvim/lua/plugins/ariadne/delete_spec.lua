@@ -97,9 +97,9 @@ describe("delete.delete", function()
     assert.is_truthy(asked[1]:find("alpha"))
   end)
 
-  it("counts a link that get_backlinks would miss", function()
-    -- A path prefix and a different case: the bracketed-prefix grep in
-    -- utils.get_backlinks finds neither, which is why this one resolves exactly.
+  it("counts a link a bracket-prefix grep would miss", function()
+    -- A path prefix and a different case: a grep for the bracketed prefix
+    -- `[[linked` finds neither, which is why this resolves the link exactly.
     local path = write("linked.md", "Body.\n")
     write("bypath.md", "See [[sub/Linked]] here.\n")
     open(path)
@@ -202,6 +202,38 @@ describe("delete.delete", function()
     for _, hit in ipairs(utils.grep_note_files("gone")) do
       assert.is_nil(hit:find(".trash", 1, true))
     end
+  end)
+
+  it("does not count a note that links here only from its backlinks block", function()
+    -- That block is derived from this note's own links, so counting it would
+    -- gate the delete on an edge the user never wrote.
+    write("blocked.md", "Body.\n\n<!-- ariadne:backlinks -->\n- [[lonely]]\n<!-- /ariadne:backlinks -->\n")
+    local path = write("lonely.md", "Nothing authored points here.\n")
+    open(path)
+    delete.delete()
+    assert.equals(0, #asked)
+    assert.is_truthy(trashed("lonely.md"))
+  end)
+
+  it("unwraps the authored link and leaves the block row alone", function()
+    -- Unwrapping the whole text rewrote rows the confirm prompt never counted,
+    -- and `- doomed` is no longer a row, so the next :AriadneBacklinks absorbed
+    -- it as an annotation of whichever row preceded it. Left alone, it is
+    -- invisible to every tool and disappears on that refresh instead.
+    local keeper = write(
+      "keeper.md",
+      "Body links [[doomed]] once.\n\n<!-- ariadne:backlinks -->\n"
+        .. "- [[doomed]] — annotated\n- [[other]]\n<!-- /ariadne:backlinks -->\n"
+    )
+    local path = write("doomed.md", "Body.\n")
+    open(path)
+    answer(1, 1)
+    delete.delete()
+    local text = read(keeper)
+    assert.is_truthy(text:find("Body links doomed once.", 1, true))
+    assert.is_truthy(text:find("- [[doomed]] — annotated", 1, true))
+    assert.is_truthy(asked[1]:find("1 link%(s%) in 1 note%(s%)"))
+    assert.is_truthy(notified[#notified]:find("Unwrapped 1 link(s) in 1 note(s)", 1, true))
   end)
 
   it("does not count a link from an already-trashed note", function()

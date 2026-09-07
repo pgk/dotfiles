@@ -29,6 +29,7 @@ return {
     local branch = require("plugins.ariadne.branch")
     local place = require("plugins.ariadne.place")
     local activity = require("plugins.ariadne.activity")
+    local backlinks = require("plugins.ariadne.backlinks")
 
     -- Setup all modules
     panel.setup()
@@ -45,6 +46,7 @@ return {
     branch.setup()
     place.setup()
     activity.setup()
+    backlinks.setup()
 
     -- Set up path settings and mappings for markdown
     vim.api.nvim_create_autocmd("FileType", {
@@ -106,8 +108,8 @@ return {
     vim.keymap.set("n", "<leader>oll", "<cmd>AriadneLinksPanel<cr>", { desc = "Ariadne links panel" })
     vim.keymap.set("n", "<leader>olb", function()
       local current_file = vim.api.nvim_buf_get_name(0)
-      local backlinks = utils.get_backlinks(current_file)
-      if #backlinks == 0 then
+      local linked = backlinks.linking_notes(utils.resolve(current_file), utils.get_note_name(current_file))
+      if #linked == 0 then
         vim.notify("No backlinks found", vim.log.levels.INFO)
         return
       end
@@ -116,6 +118,7 @@ return {
     vim.keymap.set("n", "<leader>olf", "<cmd>Obsidian links<cr>", { desc = "Ariadne forward links (picker)" })
     vim.keymap.set("n", "<leader>oli", "<cmd>AriadneInsertLink<cr>", { desc = "Ariadne insert link" })
     vim.keymap.set("n", "<leader>olt", "<cmd>AriadneTransclusionToggle<cr>", { desc = "Ariadne toggle transclusions" })
+    vim.keymap.set("n", "<leader>olw", "<cmd>AriadneBacklinks<cr>", { desc = "Ariadne write backlinks into the note" })
 
     -- g: the whole vault, not the note in front of you.
     vim.keymap.set("n", "<leader>ogg", "<cmd>AriadneGraphHealth<cr>", { desc = "Ariadne orphan/sparse/splittable notes" })

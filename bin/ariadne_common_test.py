@@ -22,7 +22,124 @@ def write_vault(root, files):
         path.write_text(content)
 
 
+BLOCK = (
+    "<!-- ariadne:backlinks -->\n"
+    "## Backlinks\n"
+    "\n"
+    "- [[hub]]\n"
+    "- [[bridge]] — why this one matters\n"
+    "<!-- /ariadne:backlinks -->\n"
+)
+
+
+FIXTURE = (
+    Path(__file__).resolve().parent.parent
+    / "base/nvim/nvim/lua/plugins/ariadne/backlinks-block.fixture"
+)
+
+
+class SharedFixtureTests(unittest.TestCase):
+    """The one artefact both strippers are pinned against.
+
+    Each side used to be pinned by its own hand-written copy of a block, so
+    neither pinned the other: they disagreed about unspaced markers and CRLF and
+    both suites stayed green. `backlinks_spec.lua` asserts the editor *renders*
+    exactly this file; here it must be what Python strips.
+    """
+
+    def test_strips_the_block_the_editor_renders(self):
+        block = FIXTURE.read_text()
+        self.assertEqual(ariadne_common.strip_backlinks_block("Body.\n\n" + block), "Body.\n\n")
+        self.assertEqual(
+            ariadne_common.extract_links("Body links [[real]].\n\n" + block), ["real"]
+        )
+
+
+class StripBacklinksBlockTests(unittest.TestCase):
+    def test_an_unpaired_marker_above_a_block_does_not_swallow_the_prose(self):
+        # The editor-side blocker, in its read-only form: a `.*?` reaching from
+        # the stray marker to the real block's closer deleted the note's real
+        # outbound edges from the graph and its prose from the embedding.
+        raw = (
+            "Intro [[a]].\n"
+            "<!-- ariadne:backlinks -->\n"
+            "An essay linking [[b]] and [[c]].\n" + BLOCK
+        )
+        stripped = ariadne_common.strip_backlinks_block(raw)
+        self.assertIn("An essay linking [[b]] and [[c]].", stripped)
+        self.assertEqual(ariadne_common.extract_links(raw), ["a", "b", "c"])
+
+    def test_removes_every_block_not_only_the_first(self):
+        self.assertEqual(
+            ariadne_common.strip_backlinks_block(BLOCK + "middle\n" + BLOCK), "middle\n"
+        )
+
+    def test_crlf_line_endings_are_still_a_block(self):
+        # A regex anchored on "\n" left a CRLF note's block links in the graph.
+        raw = ("Body.\n\n" + BLOCK).replace("\n", "\r\n")
+        self.assertEqual(ariadne_common.extract_links(raw), [])
+
+    def test_only_ascii_whitespace_may_surround_a_marker(self):
+        # `vim.trim` is byte-wise ASCII; a bare .strip() is the full Unicode
+        # class, a strict superset. A marker behind a NBSP was a block here and
+        # not in the editor, so the graph ignored it while the editor read its
+        # rows back as authored links and wrote the mirror. `backlinks_spec.lua`
+        # asserts the editor agrees on this exact input.
+        raw = "\u00a0<!-- ariadne:backlinks -->\n- [[hub]]\n<!-- /ariadne:backlinks -->\n"
+        self.assertEqual(ariadne_common.strip_backlinks_block(raw), raw)
+        self.assertEqual(ariadne_common.extract_links(raw), ["hub"])
+
+    def test_ascii_whitespace_around_a_marker_is_still_allowed(self):
+        raw = " \t<!-- ariadne:backlinks -->\n- [[hub]]\n\t <!-- /ariadne:backlinks -->\n"
+        self.assertEqual(ariadne_common.strip_backlinks_block(raw), "")
+
+    def test_a_fenced_example_of_a_block_is_not_a_block(self):
+        # A note documenting this feature quotes the markers. `backlinks_spec.lua`
+        # asserts the editor leaves the same example alone rather than rewriting
+        # it with live rows.
+        raw = "```\n" + BLOCK + "```\n"
+        self.assertEqual(ariadne_common.strip_backlinks_block(raw), raw)
+        self.assertEqual(ariadne_common.extract_links(raw), ["hub", "bridge"])
+
+    def test_an_unterminated_fence_is_not_a_fence(self):
+        # Otherwise a stray ``` hides every marker below it.
+        self.assertEqual(ariadne_common.extract_links("```\nBody [[a]].\n" + BLOCK), ["a"])
+
+    def test_a_marker_is_the_exact_text_alone_on_its_line(self):
+        # Deliberately strict, and matched line for line by `backlinks.spans`:
+        # the two sides disagreeing about what a marker is means a mirror on one
+        # side and not the other.
+        for marker in ("<!--ariadne:backlinks-->", "<!-- ariadne:backlinks --> and more"):
+            raw = marker + "\n- [[hub]]\n<!-- /ariadne:backlinks -->\n"
+            self.assertEqual(ariadne_common.strip_backlinks_block(raw), raw)
+
+    def test_removes_the_whole_block_including_its_heading(self):
+        raw = "Body.\n\n" + BLOCK
+        self.assertEqual(ariadne_common.strip_backlinks_block(raw), "Body.\n\n")
+
+    def test_note_without_a_block_is_untouched(self):
+        raw = "Body with [[a link]].\n"
+        self.assertEqual(ariadne_common.strip_backlinks_block(raw), raw)
+
+    def test_unterminated_opening_marker_is_left_alone(self):
+        raw = "Body.\n\n<!-- ariadne:backlinks -->\n- [[hub]]\n"
+        self.assertEqual(ariadne_common.strip_backlinks_block(raw), raw)
+
+    def test_text_after_the_block_survives(self):
+        raw = BLOCK + "A footer line.\n"
+        self.assertEqual(ariadne_common.strip_backlinks_block(raw), "A footer line.\n")
+
+
 class ExtractLinksTests(unittest.TestCase):
+    def test_block_links_are_not_authored_links(self):
+        # The whole point of the strip: without it A links to B, so B's block
+        # names A, so A's block names B, and every link mirrors itself.
+        links = ariadne_common.extract_links("Body links [[real]].\n\n" + BLOCK)
+        self.assertEqual(links, ["real"])
+
+    def test_a_link_outside_the_block_is_still_found(self):
+        self.assertEqual(ariadne_common.extract_links(BLOCK + "\nsee [[after]]"), ["after"])
+
     def test_extracts_link_target_not_alias_display_text(self):
         links = ariadne_common.extract_links("see [[hub|the hub note]]")
         self.assertEqual(links, ["hub"])

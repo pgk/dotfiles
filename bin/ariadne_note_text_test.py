@@ -14,6 +14,25 @@ import ariadne_note_text
 
 
 class NoteTextTests(unittest.TestCase):
+    def test_backlinks_block_is_not_embedded(self):
+        raw = (
+            "The body.\n\n"
+            "<!-- ariadne:backlinks -->\n## Backlinks\n\n- [[hub]]\n"
+            "<!-- /ariadne:backlinks -->\n"
+        )
+        self.assertEqual(ariadne_note_text.note_text("n", raw), "n\n\nThe body.")
+
+    def test_refreshing_backlinks_does_not_change_the_content_hash(self):
+        # content_hash drives re-indexing, so a block left in the text would
+        # re-embed and re-upload the note every time its backlinks were written.
+        body = "The body.\n"
+        blocked = body + "\n<!-- ariadne:backlinks -->\n- [[hub]]\n<!-- /ariadne:backlinks -->\n"
+        self.assertEqual(
+            ariadne_note_text.content_hash(ariadne_note_text.note_chunks("n", body)),
+            ariadne_note_text.content_hash(ariadne_note_text.note_chunks("n", blocked)),
+        )
+
+
     def test_frontmatter_is_stripped_and_name_prepended(self):
         text = ariadne_note_text.note_text("my-note", "---\ntitle: X\ntags:\n  - a\n---\nThe body.\n")
         self.assertEqual(text, "my-note\n\nThe body.")

@@ -32,6 +32,16 @@ ensures `ariadne-similar`'s Ollama embedding model is pulled, shelling out to
 `ollama list`/`ollama pull` — no `ariadne_common` import, no vault argument, by
 design.
 
+## The backlinks block is not authored text
+
+`:AriadneBacklinks` writes a `<!-- ariadne:backlinks -->` block into a note
+listing what links to it. `ariadne_common.strip_backlinks_block` drops it, and
+`extract_links` calls that itself so no links caller here can forget to — read
+it before adding a tool that reads note text. `ariadne_note_text.note_body` and
+`ariadne_splittable.note_stats` strip it separately, because they read the note
+as prose as well as for links. The full reasoning, and what breaks without it,
+is in `../base/nvim/nvim/lua/plugins/ariadne/CLAUDE.md`.
+
 ## What gets embedded
 
 `ariadne_note_text.py` owns this end — `note_chunks()`, `content_hash()`,

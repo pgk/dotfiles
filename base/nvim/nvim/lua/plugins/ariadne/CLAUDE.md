@@ -99,13 +99,95 @@ Two rules it must keep:
   `[[Dir/A-Note#Top]]` counts as a link to `a-note`. `commands.rewrite_links`
   used to compare the raw bracketed text and so missed the path and anchor
   forms; since `rename` deletes the original, those became dead links, and it
-  now goes through `wikilinks.retarget`. `utils.get_backlinks` still compares
-  the bracketed prefix — survivable for a sidebar, not for a delete gate, which
-  is why `delete.linking_notes` does not reuse it. In both, the grep is only a
-  prefilter and searches the bare name, not `[[name`, so those forms reach the
-  exact check at all.
+  now goes through `wikilinks.retarget`. `backlinks.linking_notes` is the one
+  exact inbound scan — the delete gate, the links panel and `:AriadneBacklinks`
+  all use it. It replaced a bracket-prefix grep in `utils.get_backlinks` that
+  missed the path and case forms, plus a near-copy inside `delete.lua`. In it,
+  the grep is only a prefilter and searches the bare name, not `[[name`, so
+  those forms reach the exact check at all.
 - **Ask `utils.in_vault(path)`, never `vim.startswith(path, vault)`.** See
   "Is this path in the vault?" below.
+
+## Backlinks written into a note
+
+`:AriadneBacklinks` (`backlinks.lua`) keeps a marked block at the end of a note
+listing what links to it. One rule makes it work, and it is not optional:
+
+**The block is derived text. Every reader strips it first.** Both sides have a
+stripper — `ariadne_common.strip_backlinks_block` and `backlinks.strip` — and
+the Python one is folded into `extract_links` itself so no links caller can
+forget it. Without the rule the block mirrors itself: A links to B, so B's block
+names A, so A's block names B, and each note's block fills up with the notes it
+links to.
+
+**The two must agree on what a block *is*.** `ariadne_common._block_spans` and
+`backlinks.spans` are the same line walk, written twice rather than shared: an
+opening marker alone on its line, a body with no further opening marker, a
+closing marker alone on its line, and *every* such block stripped. Two things
+came out of that shape being got wrong:
+
+- Pairing the **first** opener with the first closer let an unpaired marker
+  higher up a note — a hand-pruned block, or a note quoting the markers while
+  documenting them — swallow the prose down to the real block's closer. Run one
+  appended a block, supplying the stray marker's missing closer; run two
+  replaced the whole span and reported *"unchanged"*, because the rows had not
+  moved. Reproduced, and pinned in `backlinks_spec.lua`.
+- The Python side was a regex and the Lua side a line comparison, so they
+  disagreed about unspaced markers, trailing text on a marker line, and CRLF —
+  each disagreement a mirror on one side and not the other. Each suite pinned
+  its own hand-written copy of a block, so neither pinned the other and both
+  stayed green. `backlinks-block.fixture` is now the one artefact: the Lua spec
+  asserts `render` reproduces it byte for byte, the Python suite asserts
+  `strip_backlinks_block` empties it. **Change a marker or the rendered shape in
+  one place and that file must change with it.**
+- The whitespace a marker may sit in is part of that grammar, and the fixture
+  cannot pin it — it contains no odd whitespace to disagree about. Python strips
+  `BACKLINKS_TRIM` explicitly, which is `vim.trim`'s byte-wise ASCII set; a bare
+  `.strip()` is the full Unicode class, a strict superset, so a marker behind a
+  NBSP was a block to the graph and not to the editor — the mirror, live on one
+  side. Both suites now assert that same input on their own side.
+- **Fenced markers are examples, not markers**, in both walks (`fenced` /
+  `_fenced_lines`). A note documenting this feature quotes them, and a quoted
+  *complete* block was taken as the live one: `:AriadneBacklinks` overwrote the
+  example with real rows and named the example's note as a removed backlink. An
+  unterminated fence is not a fence, the stance `FENCE_RE` already takes, so a
+  stray ``` cannot hide every marker below it.
+- **The fixture pins the happy path; every rejection needs its own assertion on
+  both sides.** Loosening the Lua walk to a prefix match left all twelve spec
+  files green while Python still refused the same input — the fixture contains
+  no line that must be *rejected*, so it cannot catch a grammar that only got
+  more permissive.
+
+What the strip is *not* for is the vault graph. `adjacency_from_links` records
+both directions, so a backlink is already an edge and none of the undirected
+metrics — orphans, sparse, degree, Louvain clusters, hub coverage, `--since`,
+`--neglected`, `ariadne-similar`'s already-linked filter — can see the
+difference. Everything it protects reads a note *directionally* or as prose:
+
+- `ariadne_splittable` on both counts. Its `out_degree` gate treats a
+  high-out-degree note as an index and vetoes it from the report, so a note with
+  eight backlinks would silently stop being offered as splittable; and it counts
+  `##` headings, which is why the markers wrap the `## Backlinks` heading rather
+  than sitting under it.
+- `ariadne_note_text.note_body`, and so `content_hash` — a block left in would
+  re-embed and re-upload the note every time its backlinks were refreshed.
+- `backlinks.linking_notes` itself, which is where the mirror would start.
+
+Two consequences worth knowing:
+
+- A `[[link]]` typed inside the block is invisible to every tool, the graph
+  included. That was chosen deliberately over a partial rule.
+- `delete.lua` gates and unwraps on *authored* text alike (`unwrap_authored`),
+  so a deleted note's row in someone else's block is left alone. It unwrapped
+  the whole text at first, which rewrote rows the confirm prompt had never
+  counted and reported more links than it warned about — and `- deleted-note`
+  is no longer a row, so the next refresh absorbed the corpse as an annotation
+  of whichever row preceded it. Left alone, the row is invisible to every tool
+  (`ariadne-deadlinks` strips too) and the next refresh drops it.
+
+`update()` edits the **buffer**, not the file. That is what makes dropping a
+stale row safe enough to do without asking: `u` brings back a row the user had
+annotated, before the note is ever written.
 
 ## Is this path in the vault?
 
@@ -233,7 +315,7 @@ original, so nothing was left behind.
 
 ## Keymaps
 
-All 23 live under `<leader>o` and are grouped by intent: `n`ew, `f`ind, `l`inks
+All 24 live under `<leader>o` and are grouped by intent: `n`ew, `f`ind, `l`inks
 (this note's edges), `g`raph (the whole vault). Three stay flat — `oR` rename,
 `oX` delete, `oh` help — the two irreversible ones deliberately off the group
 prefixes, where a slip inside a group cannot reach them.
@@ -311,6 +393,32 @@ link retarget, and each refusal. It stubs `vim.system` **only** for
 `commands.rename` go through to the real one, because which ids are taken and
 what links at the note are the two things the command must get right, and a stub
 there would only assert the fixture back at itself.
+
+`backlinks_spec.lua` drives `:AriadneBacklinks` against tempdir vaults with
+`Obsidian.dir` pointed at them: the insert, an idempotent re-run, an annotated
+row surviving verbatim, an annotation on its own line travelling with its row,
+the existing order being kept, the stale row being dropped and named, the block
+being removed when nothing links here, and the exact path/anchor/case
+resolution. Three earn their place above the rest: "does not read another
+note's block as a link" (the mirror), "keeps the body when an unpaired marker
+sits above the block" (the two-run body deletion), and the fixture round-trip
+that ties `render` to the Python stripper. `delete_spec.lua` gained the two
+cases for the authored-text gate and unwrap.
+
+Two of those were once green for the wrong reason, which is worth knowing before
+trusting the rest. The body-deletion case asserted on the **buffer**, and prose
+swallowed *into* the block rather than deleted passed it — while being just as
+gone from the graph and the embeddings. It asserts on `backlinks.strip(buffer())`
+now. Mutation is what found it, and mutating this module needs care: `~/.config/nvim`
+is a symlink to `base/nvim/nvim`, so a mutated copy earlier on `rtp` is silently
+ignored and every mutant "passes". Preload it instead:
+
+```sh
+nvim --headless -c "set rtp+=$HOME/.local/share/nvim/lazy/plenary.nvim" \
+  -c "set rtp+=$PWD/base/nvim/nvim" \
+  -c "lua package.loaded['plugins.ariadne.backlinks'] = dofile('/tmp/mutant.lua')" \
+  -c "lua require('plenary.busted').run('$PWD/<spec>')"
+```
 
 `wikilinks_spec.lua` pins the link grammar — resolution keys, display text and
 unwrapping — against the path, anchor, alias and embed forms. `delete_spec.lua`

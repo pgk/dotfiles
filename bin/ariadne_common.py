@@ -10,6 +10,16 @@ import sys
 # -- splittable detection and chunking -- cannot drift apart.
 FENCE_RE = re.compile(r"^```.*?^```", re.MULTILINE | re.DOTALL)
 WIKILINK_RE = re.compile(r"\[\[([^\]|]+)")
+# The block :AriadneBacklinks writes into a note. Its content is derived from the
+# vault's own links, so every tool here strips it before reading -- see
+# strip_backlinks_block. The markers wrap the heading as well as the rows,
+# because ariadne_splittable counts `##` headings and one in every note would
+# drag notes toward its "long enough to split" gate.
+BACKLINKS_OPEN = "<!-- ariadne:backlinks -->"
+BACKLINKS_CLOSE = "<!-- /ariadne:backlinks -->"
+# `vim.trim`'s character set, which the editor side cannot cheaply widen: its
+# `%s` is byte-wise ASCII. See _block_spans.
+BACKLINKS_TRIM = " \t\n\r\v\f"
 # The whole span, brackets included, for rewriting rather than harvesting links.
 WIKILINK_SPAN_RE = re.compile(r"!?\[\[([^\[\]]*)\]\]")
 
@@ -92,6 +102,83 @@ def iter_markdown_files(vault, excludes):
             print(f"warning: --exclude {printable(pattern)} matched nothing", file=sys.stderr)
 
 
+def _fenced_lines(lines):
+    """Line indices inside a closed ``` fence — where a marker is an example, not a marker.
+
+    A note documenting this feature quotes the markers, and a quoted *complete*
+    block was taken as the live one. `backlinks.fenced` is the same walk. An
+    unterminated fence is not a fence, the stance FENCE_RE already takes, so a
+    stray ``` cannot hide the rest of a note's markers.
+    """
+    ticks = [i for i, line in enumerate(lines) if line.strip(BACKLINKS_TRIM).startswith("```")]
+    inside = set()
+    for opened, closed in zip(ticks[0::2], ticks[1::2]):
+        inside.update(range(opened, closed + 1))
+    return inside
+
+
+def _block_spans(lines):
+    """Every backlinks block, as inclusive (first, last) line indices.
+
+    A block is a line that is exactly the opening marker, a body containing no
+    further opening marker, and a line that is exactly the closing marker. This
+    is `backlinks.spans` in the editor, deliberately line for line rather than a
+    regex: the two are the two answers to "which links did the user write?", and
+    a grammar they disagree on is a mirror on one side and not the other. It was
+    a regex, and they disagreed about unspaced markers, trailing text on a marker
+    line, and CRLF. `backlinks-block.fixture` now pins them to one artefact.
+
+    A second opening marker restarts the block rather than nesting inside it, so
+    an unpaired marker earlier in a note cannot pair with a real block's closer
+    and swallow the prose between. An unterminated marker is left alone, as
+    strip_frontmatter leaves an unterminated `---`.
+    """
+    found, open_at = [], None
+    fenced = _fenced_lines(lines)
+    for i, line in enumerate(lines):
+        # BACKLINKS_TRIM, not a bare .strip(): that is the full Unicode
+        # whitespace class, a strict superset of `vim.trim`'s, so a marker
+        # preceded by a NBSP was a block to Python and not to the editor -- the
+        # graph ignored the block while the editor read its rows back as authored
+        # links and wrote the mirror. Python is the permissive side in every such
+        # case, which is why this is the end that narrows.
+        stripped = "" if i in fenced else line.strip(BACKLINKS_TRIM)
+        if stripped == BACKLINKS_OPEN:
+            open_at = i
+        elif stripped == BACKLINKS_CLOSE and open_at is not None:
+            found.append((open_at, i))
+            open_at = None
+    return found
+
+
+def strip_backlinks_block(text):
+    """Drop the `<!-- ariadne:backlinks -->` block: it is derived text, not written text.
+
+    :AriadneBacklinks materialises what already links to a note. Reading those
+    links back would mirror every link into its own source -- A links to B, so
+    B's block names A, so A's block names B -- and each note's block would fill
+    up with the notes it links to. Stripping is what keeps the block a report of
+    the graph rather than part of it.
+
+    The graph itself is unaffected either way: adjacency_from_links records both
+    directions, so a backlink is already an edge. What the strip protects is
+    everything that reads a note *directionally* or as prose -- splittable's
+    out-degree and heading count, the embedded text, and the editor's own
+    backlink scan.
+
+    Every block goes, not just the first: a note that has ended up with two would
+    otherwise have the other read back as authored links, which is the mirror.
+    """
+    lines = text.split("\n")
+    spans = _block_spans(lines)
+    if not spans:
+        return text
+    dropped = set()
+    for first, last in spans:
+        dropped.update(range(first, last + 1))
+    return "\n".join(line for i, line in enumerate(lines) if i not in dropped)
+
+
 def strip_frontmatter(text):
     """Drop a leading YAML frontmatter block (`---`-delimited); unterminated is left alone."""
     if not text.startswith("---"):
@@ -132,8 +219,15 @@ def build_name_index(files):
 
 
 def extract_links(text):
+    """Every note this text links to, as raw link targets -- authored links only.
+
+    The strip happens here rather than at each caller so that no caller can
+    forget it; see strip_backlinks_block for what forgetting would cost. Callers
+    that need the block gone from *prose* as well (ariadne_note_text,
+    ariadne_splittable) strip it themselves before their own reading.
+    """
     links = []
-    for raw in WIKILINK_RE.findall(text):
+    for raw in WIKILINK_RE.findall(strip_backlinks_block(text)):
         target = raw.split("#", 1)[0].strip()
         target = os.path.basename(target.replace("\\", "/"))
         if target:

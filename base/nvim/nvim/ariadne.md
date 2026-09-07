@@ -49,6 +49,7 @@ was doing the work of a namespace.
 | `<leader>olf` | `:Obsidian links` | Forward links in picker |
 | `<leader>oli` | `:AriadneInsertLink` | Search vault and insert link at cursor |
 | `<leader>olt` | `:AriadneTransclusionToggle` | Toggle transclusion rendering |
+| `<leader>olw` | `:AriadneBacklinks` | Write the notes linking here into this note |
 
 **`g` — graph: the whole vault, not the note in front of you**
 
@@ -114,6 +115,41 @@ reach the two that destroy or rewrite a note.
 | `:AriadneBranch` | Branch off the current note, one level deeper |
 | `:AriadneSibling` | Continue the current note's line, at the same level |
 | `:AriadnePlace` | Find where the current id-less note fits in the hierarchy, then rename it there (picker) |
+| `:AriadneBacklinks` | Write the notes linking here into this note, as a managed block |
+
+## Backlinks in the Note
+
+`:AriadneBacklinks` (`<leader>olw`) keeps a block at the end of the current note
+listing every note that links to it, so the inbound edges are readable in the
+file itself and in Obsidian, not only in the links panel:
+
+```markdown
+<!-- ariadne:backlinks -->
+## Backlinks
+
+- [[hub-note]] — why this one matters
+- [[bridge-note]]
+<!-- /ariadne:backlinks -->
+```
+
+**The rows are yours to annotate.** A row you have written on is kept exactly as
+you left it, in the order you left it in; only new backlinks are appended. A row
+whose note has stopped linking here is dropped and named in the message — the
+command edits the buffer rather than the file, so `u` brings it back if you
+wanted it.
+
+**The block is not part of your vault's link graph.** Every ariadne tool strips
+it before reading a note, so the links in it do not count as links you wrote.
+Without that, a link from A to B would put A in B's block, then B in A's, and
+each block would fill up with the notes it links to. A `[[link]]` you type
+inside the block is invisible to the tools for the same reason — write it in the
+note's body instead.
+
+Markers inside a ``` fence are an example, not a block — a note explaining this
+feature is safe to write.
+
+The command reads one note at a time, so a block goes stale when another note
+starts or stops linking here. Re-run it on the note when you want it current.
 
 ## Links Panel
 

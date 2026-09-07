@@ -1,4 +1,5 @@
 -- Links panel for the Ariadne notes workflow
+local backlinks = require("plugins.ariadne.backlinks")
 local utils = require("plugins.ariadne.utils")
 
 local M = {}
@@ -41,7 +42,11 @@ local function update_panel()
   M.state.current_note = current_file
 
   local forward = utils.get_forward_links(current_file)
-  local back = utils.get_backlinks(current_file)
+  local back = backlinks.linking_notes(
+    utils.resolve(current_file),
+    utils.get_note_name(current_file),
+    { context = true }
+  )
   local current_note_name = utils.get_note_name(current_file)
 
   local lines = {}
@@ -79,10 +84,14 @@ local function update_panel()
   else
     for _, link in ipairs(back) do
       local line_num = #lines
-      table.insert(lines, "  " .. link.name)
-      table.insert(highlights, {line_num, 2, 2 + #link.name, "Function"})
+      -- Sanitized at the insertion site: both come from a note's own text, and a
+      -- control or bidi character could misrepresent which note a row names --
+      -- which is the row `open_link_under_cursor` then opens.
+      local name = utils.sanitize(link.name)
+      table.insert(lines, "  " .. name)
+      table.insert(highlights, {line_num, 2, 2 + #name, "Function"})
       -- Add context (the line where link appears)
-      local context = utils.get_backlink_context(link.path, current_note_name, 40)
+      local context = utils.sanitize(link.context)
       if context ~= "" then
         table.insert(lines, "    " .. context)
         table.insert(highlights, {#lines - 1, 0, -1, "Comment"})

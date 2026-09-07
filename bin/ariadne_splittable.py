@@ -19,12 +19,19 @@ FENCE_RE = ariadne_common.FENCE_RE
 
 
 def note_stats(path, raw, name_index, files):
-    """words/headers from the frontmatter- and fence-stripped body; out_degree from raw links."""
-    body = FENCE_RE.sub("", ariadne_common.strip_frontmatter(raw))
+    """words/headers from the frontmatter- and fence-stripped body; out_degree from its links.
+
+    All three read `authored` rather than `raw`: a backlinks block would add a
+    `## Backlinks` heading to the count that gates this report, and enough
+    out-degree to make a note with many backlinks look like an index and be
+    vetoed from it.
+    """
+    authored = ariadne_common.strip_backlinks_block(raw)
+    body = FENCE_RE.sub("", ariadne_common.strip_frontmatter(authored))
     words = len(body.split())
     headers = HEADER_RE.findall(body)
     out = set()
-    for link_text in ariadne_common.extract_links(raw):
+    for link_text in ariadne_common.extract_links(authored):
         target = ariadne_common.resolve_link(link_text, name_index)
         if target is not None and target != path and target in files:
             out.add(target)

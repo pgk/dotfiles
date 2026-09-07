@@ -24,6 +24,7 @@ thin Lua layer that wires their `--json` output into fzf-lua pickers.
 | `daily.lua` | Daily note template — on-this-day, neglected, and review sections |
 | `anniversary.lua` | Date logic behind the "on this day" section |
 | `panel.lua` | Links panel sidebar (forward links + backlinks) |
+| `backlinks.lua` | What links here: the exact inbound scan, and the block `:AriadneBacklinks` writes into a note |
 | `transclusion.lua` | Inline `![[note]]` rendering |
 | `format.lua` | Custom `formatexpr` so `gw`/`gq` cannot break a `[[wiki link]]` across lines |
 | `graph.lua` | Orphan/sparse/splittable notes and hubless clusters (`:AriadneGraphHealth`) |
