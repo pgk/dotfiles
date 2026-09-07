@@ -165,6 +165,14 @@ describe("utils.as_wikilink", function()
     assert.equals("open[bracket", utils.as_wikilink("open[bracket"))
   end)
 
+  it("refuses a pipe or an anchor too — both name a different note", function()
+    -- `[[real-target|evil]]` resolves to `real-target` and displays "evil";
+    -- `[[a#b]]` resolves to `a`. :AriadneBacklinks writes rows named by whatever
+    -- files are on disk, so a filename alone could forge either.
+    assert.equals("real-target|evil", utils.as_wikilink("real-target|evil"))
+    assert.equals("real-target#evil", utils.as_wikilink("real-target#evil"))
+  end)
+
   it("handles nil without throwing", function()
     assert.equals("[[]]", utils.as_wikilink(nil))
   end)

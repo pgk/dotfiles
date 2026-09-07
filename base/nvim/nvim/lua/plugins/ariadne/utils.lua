@@ -29,12 +29,18 @@ end
 -- Render an untrusted note name as a wikilink for writing into a note file.
 -- sanitize() escapes control characters, so a name carrying a newline cannot
 -- become a line of its own -- which matters because nvim reads a modeline from
--- the last five lines of a file it opens. A name containing a bracket gets no
--- link syntax at all: "]]" would close the wikilink early, forging a link to a
--- note the writer never referenced.
+-- the last five lines of a file it opens.
+--
+-- A name containing a bracket, a pipe or an anchor gets no link syntax at all,
+-- because each of the three forges a link to a different note: "]]" closes the
+-- wikilink early, and `[[a|b]]` / `[[a#b]]` resolve to `a` while displaying `b`.
+-- The class matches `wikilinks.retarget`, which refused all three from the
+-- start. It was brackets only, and `:AriadneBacklinks` -- which writes rows
+-- named by whatever files are on disk -- turned that gap into a link a reader
+-- could not tell from one the user wrote.
 function M.as_wikilink(name)
   local safe = M.sanitize(name)
-  if safe:find("[%[%]]") then
+  if safe:find("[%[%]|#]") then
     return safe
   end
   return "[[" .. safe .. "]]"
@@ -251,31 +257,6 @@ function M.get_note_preview(filepath, max_len)
   return preview
 end
 
-function M.get_backlink_context(filepath, note_name, max_len)
-  max_len = max_len or 50
-  local file = io.open(filepath, "r")
-  if not file then
-    return ""
-  end
-  local pattern = "%[%[" .. M.escape_pattern(note_name)
-  for line in file:lines() do
-    if line:match(pattern) then
-      -- Remove the link itself and clean up
-      local context = line:gsub("%[%[[^%]]+%]%]", ""):gsub("^%s+", ""):gsub("%s+$", "")
-      file:close()
-      if context == "" then
-        return "(link only)"
-      end
-      if #context > max_len then
-        context = context:sub(1, max_len) .. "…"
-      end
-      return context
-    end
-  end
-  file:close()
-  return ""
-end
-
 -- Find a note file by name (case-insensitive), argv-based so link text from a
 -- note buffer can never reach a shell. -quit stops at the first match instead
 -- of walking the whole vault on every call.
@@ -353,22 +334,9 @@ function M.get_forward_links(filepath)
   return links
 end
 
-function M.get_backlinks(filepath)
-  local note_name = M.get_note_name(filepath)
-  local backlinks = {}
-
-  -- Search for [[note_name using fixed string (matches [[note]] and [[note|alias]])
-  local search_term = "[[" .. note_name
-  local result = M.grep_note_files(search_term)
-
-  for _, file in ipairs(result) do
-    if file ~= filepath then
-      table.insert(backlinks, { name = M.get_note_name(file), path = file })
-    end
-  end
-  table.sort(backlinks, function(a, b) return a.name < b.name end)
-  return backlinks
-end
+-- What links *to* a note lives in `backlinks.lua`, not here: it resolves each
+-- candidate exactly and skips the managed backlinks block, neither of which a
+-- grep for `[[name` can do. This module keeps the grep it prefilters with.
 
 function M.escape_pattern(s)
   return s:gsub("([%-%.%+%[%]%(%)%$%^%%%?%*])", "%%%1")
