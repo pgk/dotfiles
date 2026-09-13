@@ -53,11 +53,52 @@ cache, or the CLI.
 (`ariadne_common.wikilink_display`). Both matter: body-only embeddings made
 short notes with descriptive titles hard to retrieve, and an unflattened link
 is punctuation and a slug where the reader sees two words of meaning.
+
 Changing either changes every note's content hash, forcing a full re-index —
 the `--max-refresh` guard turns that into an honest "run --index" message
 rather than a silent multi-minute upload, which is the behaviour to keep.
 `--max-refresh` counts **notes**, not chunks: counting chunks would inflate the
 same vault without changing what the number is supposed to mean.
+
+The name is the **title**, not the filename: `embedded_name()` drops a leading
+Folgezettel id, so `1a2b Working Memory` embeds as `Working Memory`. An id is
+the note's address rather than its subject, and `branch.lua` puts one on every
+note it creates, so this is the common shape. It was measured on a 173-note
+public wikilink corpus (the author's own links as ground truth) by sweeping
+`alpha`, the fraction of notes still holding the id their link neighbourhood
+would give them — `alpha=1` a freshly branched tree, `alpha=0` ids gone
+decorative:
+
+| arm | gap | MRR | ΔMRR | 95% CI |
+|---|---|---|---|---|
+| bare title | 0.1589 | 0.8644 | — | — |
+| id, α=1.00 | 0.1477 | 0.8451 | −0.0193 | [−0.0477, +0.0090] |
+| id, α=0.75 | 0.1448 | 0.8380 | −0.0264 | [−0.0429, −0.0097] |
+| id, α=0.50 | 0.1429 | 0.8280 | −0.0364 | [−0.0529, −0.0208] |
+| id, α=0.00 | 0.1413 | 0.8166 | −0.0478 | [−0.0789, −0.0189] |
+
+**There is no crossover** — the bare title wins at every alignment, on
+linked-vs-unlinked separation as well as on MRR, and every interval below full
+alignment excludes zero. The mechanism is the one that already defeats a
+date-shaped name: ids are highly similar to *each other* (mean cosine 0.62
+between bare ids under embeddinggemma), so they pull unrelated notes together.
+A real tree never reaches `alpha=1` — an id records where a note was branched
+from, not what it turned out to be about — so a vault sits strictly inside the
+range where the cost is significant.
+
+Two caveats on that table, both pointing the same way. It is one corpus where
+the calls above used four, and its titles are short (`Settings`, `Hotkeys`), so
+a 4-character id is a larger perturbation than it would be on a longer title.
+MRR 0.86 is near enough to ceiling that differences compress, so the effect is
+more likely understated than overstated. A name that is *only* an id keeps it:
+stripping would leave the empty string, which is a worse thing to index.
+
+Dropping the id is itself one of the hash-changing edits above, so adopting it
+costs the vault a one-off `--index`.
+
+`--duplicates` is deliberately untouched — its title gate is `difflib` over the
+real note names, where the id is part of what makes two names the same note.
+Ids barely move that ratio anyway (mean 0.375 → 0.387 on the dev-vault).
 
 A note over `CHUNK_THRESHOLD` (1500 characters) is split at its own `##`
 headings, and any section still over `CHUNK_WINDOW` is windowed with an
@@ -223,7 +264,11 @@ over two seeds, 522 source notes, with the source note as the unit:
   documents do not have, and the daily note this feature is for is
   wikilink-dense. Same argument as the name prefix above: match the shape the
   index was built in. `passage_chunks(body, name) == note_chunks(name, body)`
-  is asserted, which is the cheapest way to keep the two ends from drifting.
+  is asserted, which is the cheapest way to keep the two ends from drifting —
+  *except* for a name that says nothing on its own, a date or a bare id, where
+  the document side still heads the chunk and the query side withholds it. That
+  divergence is deliberate on both sides and is asserted too, so a later attempt
+  to "align" them fails a test rather than silently undoing a measured call.
 - **The passage is chunked.** `passage_chunks()` windows a long selection the
   way `note_chunks()` windows a note, reusing the same `_sections` / `_windows`
   / `_packed`, so a long selection is not silently truncated at the model's
@@ -246,10 +291,22 @@ over two seeds, 522 source notes, with the source note as the unit:
   on the largest corpus, every one of those intervals excluding zero. That is exactly the
   daily note the feature exists for — `2026-09-05` says nothing about the
   passage, and date strings are highly similar to *each other*, the same effect
-  that already defeats `--duplicates`' title gate. `informative_name()` is the
-  gate: a run of two or more letters in any script. It rejects `2026-09-05`,
-  `20260905` and a bare folgezettel id like `1a2b`, and accepts `1a2b Some
-  Title`, which is the shape `branch.lua` actually creates.
+  that already defeats `--duplicates`' title gate. `embedded_head()` is the
+  gate, and it owns both steps — drop the id, then ask whether what is left
+  carries words — because `ariadne-similar`'s egress notice has to reach the
+  same verdict as the query it describes, and two copies of that rule would
+  drift. `informative_name()` underneath it is a run of two or more letters in
+  any script, and never a bare Folgezettel id: it rejects `2026-09-05`,
+  `20260905` and `1a2b`, and accepts `1a2b Some Title` — the shape `branch.lua`
+  creates — which reaches it as `Some Title`. The bare-id rejection is explicit
+  rather than left to the letter-run test, which only caught the ids whose
+  letter runs happen to be single characters: `1a2b` was uninformative but
+  `1abc` and `12ab` were not, on no principle at all.
+
+  **This is not an "ids never leave the machine" guarantee, and the notice does
+  not offer one.** A note named *only* `1a2b` still has that id embedded on the
+  document side, where `note_chunks` heads a chunk unconditionally. What holds
+  is narrower: an id *in front of a title* is dropped at both ends.
 
 `--from` resolves **strictly** when it names a path: `resolve_target(...,
 path_only=True)`. The bare-name fallback is still there for `--from some-note`,

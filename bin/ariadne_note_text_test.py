@@ -206,6 +206,88 @@ class NoteChunksTests(unittest.TestCase):
         self.assertEqual(ariadne_note_text.note_chunks("n", "---\ntitle: X\n---\n"), ["n"])
 
 
+class EmbeddedNameTests(unittest.TestCase):
+    """A Folgezettel id in front of a name is the note's address, not its subject.
+
+    Measured on a 173-note public wikilink corpus, the id costs MRR at every
+    level of alignment between the id tree and the link graph: -2.2% relative
+    when the tree mirrors the links exactly, -5.5% when it has drifted, with
+    every interval below full alignment excluding zero; bin/CLAUDE.md carries the
+    table. `branch.lua` puts an id on every note it creates, so this is the
+    common shape, not an edge case.
+    """
+
+    def test_an_id_is_dropped_from_the_name_a_note_embeds(self):
+        chunks = ariadne_note_text.note_chunks("1a2b Working Memory", "the idea itself")
+        self.assertEqual(chunks, ["Working Memory\n\nthe idea itself"])
+
+    def test_the_whole_folgezettel_grammar_is_recognised(self):
+        for name in ("1 X", "12 X", "1a X", "1a1 X", "1a1a X", "1ab2c X"):
+            with self.subTest(name=name):
+                self.assertEqual(ariadne_note_text.embedded_name(name), "X")
+
+    def test_a_name_that_does_not_open_with_an_id_is_untouched(self):
+        """`1a-2` is not an alternating sequence, `1A2B` is not lowercase and an
+        id starts with digits -- the same reading as folgezettel.lua's segments(),
+        which is what branch.lua allocates against."""
+        for name in ("Working Memory", "2026-09-05 Monday", "1a-2 X", "1A2B X", "a1 X"):
+            with self.subTest(name=name):
+                self.assertEqual(ariadne_note_text.embedded_name(name), name)
+
+    def test_a_name_that_is_only_an_id_keeps_it(self):
+        """Stripping would leave nothing to embed, and the empty string is a
+        worse thing to put in the index than an uninformative name."""
+        self.assertEqual(ariadne_note_text.embedded_name("1a2b"), "1a2b")
+        self.assertEqual(ariadne_note_text.note_chunks("1a2b", "---\ntitle: X\n---\n"), ["1a2b"])
+
+    def test_every_chunk_of_a_long_note_drops_the_id(self):
+        chunks = ariadne_note_text.note_chunks("1a2b Working Memory", "word " * 900)
+        self.assertGreater(len(chunks), 1)
+        self.assertTrue(all(c.startswith("Working Memory\n\n") for c in chunks))
+
+    def test_the_query_end_strips_the_same_id_as_the_document_end(self):
+        """`--search --from` has to ask in the shape the index was built in, so
+        the two ends strip together or the feature quietly regresses."""
+        body = "the idea itself, see [[Working Memory|memory]]"
+        self.assertEqual(
+            ariadne_note_text.passage_chunks(body, "1a2b Working Memory"),
+            ariadne_note_text.note_chunks("1a2b Working Memory", body),
+        )
+
+    def test_a_passage_carries_the_title_without_the_id(self):
+        self.assertEqual(
+            ariadne_note_text.passage_chunks("the idea itself", "1a2b Working Memory"),
+            ["Working Memory\n\nthe idea itself"],
+        )
+
+    def test_note_text_strips_the_id_too(self):
+        """note_text is the anchor the one-chunk invariant is asserted against,
+        so a strip that reached note_chunks alone would make that invariant false
+        while every suite stayed green."""
+        self.assertEqual(
+            ariadne_note_text.note_chunks("1a2b Working Memory", "the idea itself"),
+            [ariadne_note_text.note_text("1a2b Working Memory", "the idea itself")],
+        )
+
+    def test_a_bare_id_is_kept_by_the_document_end_and_withheld_by_the_query_end(self):
+        """The one place the two ends deliberately disagree, pinned so a future
+        "fix" cannot quietly align them. `note_chunks` heads a chunk
+        unconditionally -- a document is stored as `name\n\nbody` -- while the
+        query end drops a name that says nothing. Neither side has anything
+        better to use for a note called only `1a2b`."""
+        body = "the idea itself"
+        self.assertEqual(ariadne_note_text.note_chunks("1a2b", body), ["1a2b\n\nthe idea itself"])
+        self.assertEqual(ariadne_note_text.passage_chunks(body, "1a2b"), [body])
+
+    def test_an_id_does_not_change_the_content_hash_of_the_title(self):
+        """The one-off re-index this forces is the whole cost of the change; a
+        note whose name was already bare must not be re-embedded for nothing."""
+        self.assertEqual(
+            ariadne_note_text.content_hash(ariadne_note_text.note_chunks("1a2b Garden Log", "b")),
+            ariadne_note_text.content_hash(ariadne_note_text.note_chunks("Garden Log", "b")),
+        )
+
+
 class PassageChunksTests(unittest.TestCase):
     """A lifted selection, chunked as a query rather than stored as a note."""
 
@@ -246,7 +328,7 @@ class PassageChunksTests(unittest.TestCase):
         for name in ("Working Memory", "db", "2026-09-05 Monday", "작업 기억", "a-note"):
             with self.subTest(name=name):
                 self.assertTrue(ariadne_note_text.informative_name(name))
-        for name in ("2026-09-05", "20260905", "1a2b", "", "12.3.4", "0081", None):
+        for name in ("2026-09-05", "20260905", "1a2b", "1abc", "12ab", "", "12.3.4", "0081", None):
             with self.subTest(name=name):
                 self.assertFalse(ariadne_note_text.informative_name(name))
 

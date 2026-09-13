@@ -60,9 +60,9 @@ def note_body(raw):
 
 
 def _headed(name, text):
-    """One embeddable string: the note name, then the text it heads.
+    """One embeddable string: the note's title, then the text it heads.
 
-    Every chunk carries the name, so a section stays attached to the note it
+    Every chunk carries the title, so a section stays attached to the note it
     came from even when the model only ever sees that section.
     """
     return (f"{name}\n\n{text}" if text else name)[:MAX_CHARS]
@@ -133,16 +133,90 @@ MAX_QUERY_CHUNKS = 8
 # separates is a name carrying *words* from one that is only digits and
 # punctuation: `2026-09-05`, or a bare folgezettel id like `1a2b`.
 WORDY_RE = re.compile(r"[^\W\d_]{2,}", re.UNICODE)
+# A Folgezettel id: digit and lowercase-letter runs alternating, digits first --
+# `1`, `1a`, `1a1`, `1ab2c`. The same grammar folgezettel.lua parses, which is
+# what `branch.lua` allocates against; anything it rejects (`1a-2`, `1A2B`,
+# `2026-09-05`) is not an id and is left alone.
+#
+# The classes are spelled out rather than written `\d` and `\s` because Lua's
+# `%d`/`%l`/`%s` are ASCII and Python's escapes are not. `\d` would accept
+# `\u0661\u0662` as an id the editor has never heard of, stripping part of an
+# Arabic-numeral title; `split(None, 1)` would split on a non-breaking space
+# that Lua reads as an ordinary character. Don't "modernize" these back.
+#
+# What it *accepts* matters as much as what it rejects: any leading digit run is
+# an id, so `1984 Orwell` embeds as `Orwell` and `10 Rules for Writing` as
+# `Rules for Writing`. That is deliberate. `folgezettel.split` reads those as
+# ids too, and `branch.lua`'s `taken_ids()` already treats such a note as
+# occupying that number -- so requiring a deeper id here would make Python and
+# Lua disagree about which id a note holds, a worse bug than the year it saves.
+# The ambiguity belongs to the scheme, not to this regex.
+FOLGEZETTEL_RE = re.compile(r"[0-9]+(?:[a-z]+[0-9]+)*[a-z]*")
+# `^(%S+)%s+(.*)$` from folgezettel.lua, ASCII classes and all; DOTALL because
+# Lua's `.` matches a newline and a filename may legally contain one.
+NAME_SPLIT_RE = re.compile(r"(\S+)\s+(.*)", re.ASCII | re.DOTALL)
+
+
+def embedded_name(name):
+    """A note's name with its Folgezettel id dropped: `1a2b Working Memory` -> `Working Memory`.
+
+    The id is the note's *address*, not its subject, and embedding it costs
+    retrieval. Measured on a 173-note public wikilink corpus with the author's
+    own links as ground truth, sweeping how closely the id tree tracks the link
+    graph: -2.2% relative MRR when it mirrors the links exactly, rising to -5.5%
+    when the ids have drifted into decoration, with every interval below full
+    alignment excluding zero. There is no crossover -- the bare title wins at
+    every level of alignment, on separation as well as on MRR. The mechanism is
+    the one that already defeats a date-shaped name: ids are highly similar to
+    *each other* (mean cosine 0.62 between bare ids under embeddinggemma), so
+    they pull unrelated notes together.
+
+    A real tree is never better aligned than the swept best case, because an id
+    records where a note was branched from rather than what it turned out to be
+    about -- so a vault sits strictly inside the range where the cost is
+    significant.
+
+    A name that is *only* an id keeps it. Stripping would leave nothing to
+    embed, and an empty string in the index is worse than an uninformative name.
+    """
+    if not name:
+        return name
+    split = NAME_SPLIT_RE.fullmatch(name)
+    if split and FOLGEZETTEL_RE.fullmatch(split.group(1)):
+        return split.group(2)
+    return name
+
+
+def embedded_head(name):
+    """The title a chunk is headed with, or None when the name says nothing.
+
+    One owner for a two-step rule -- drop the id, then ask whether what is left
+    carries words -- because both the query side (`passage_chunks`) and
+    `ariadne-similar`'s egress notice have to reach the same verdict. Two copies
+    would drift, and the notice is a privacy claim about what leaves the machine.
+
+    It also makes the single application of `embedded_name` structural:
+    `embedded_name` is not idempotent (`1a2b 1c3d Title` -> `1c3d Title`), so a
+    caller that stripped twice would eat a real word.
+    """
+    title = embedded_name(name)
+    return title if informative_name(title) else None
 
 
 def informative_name(name):
     """Whether a note's name says anything, as opposed to being a date or an id.
 
     The distinction is load-bearing rather than cosmetic: prefixing a passage
-    with its note's name is worth +2.7% / +1.8% MRR when the name is words, and
+    with its note's title is worth +2.7% / +1.8% MRR when the title is words, and
     costs -2.2% / -2.0% when it is a date. See `passage_chunks` for the method.
+
+    A bare id is rejected outright rather than left to WORDY_RE, which only
+    caught the ones whose letter runs happen to be single characters: `1a2b` was
+    uninformative but `1abc` and `12ab` were not, on no principle at all.
     """
-    return bool(name) and bool(WORDY_RE.search(name))
+    if not name or FOLGEZETTEL_RE.fullmatch(name):
+        return False
+    return bool(WORDY_RE.search(name))
 
 
 def passage_chunks(text, name=None):
@@ -178,7 +252,7 @@ def passage_chunks(text, name=None):
     # documents do not have -- and the daily note this feature is for is
     # wikilink-dense. Same reasoning as note_chunks, applied to the query side.
     text = note_body(text)
-    head = name if informative_name(name) else None
+    head = embedded_head(name)
     if len(text) <= CHUNK_THRESHOLD:
         return [_headed(head, text) if head else text[:MAX_CHARS]]
     sections = _sections(text)
@@ -199,7 +273,7 @@ def note_text(name, raw):
     Nothing in the tool calls this: `note_chunks()` is the entry point. It stays
     as the anchor for the invariant, which the tests assert against it directly.
     """
-    return _headed(name, note_body(raw))
+    return _headed(embedded_name(name), note_body(raw))
 
 
 def note_chunks(name, raw):
@@ -212,6 +286,7 @@ def note_chunks(name, raw):
     Changing any of this changes every note's content hash, which is what forces
     the one-off re-index.
     """
+    name = embedded_name(name)
     body = note_body(raw)
     whole = f"{name}\n\n{body}" if body else name
     if len(whole) <= CHUNK_THRESHOLD:

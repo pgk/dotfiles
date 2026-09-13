@@ -230,6 +230,35 @@ def run_query(args, vault, target_spec, notes, name_index, embedder):
     return 0
 
 
+def announce_egress(args, origin):
+    """Name what is about to leave the machine, to the field.
+
+    Under `--from` that is a passage out of a note rather than a typed phrase,
+    and the note's own name goes with it whenever it carries words -- minus a
+    leading Folgezettel id, which `embedded_head` drops before the query is
+    built. The notice says so rather than saying "name", which would claim the
+    id was sent, or "title", which a reader could take to mean a `#` heading
+    when what is sent is the filename.
+
+    The id is dropped from a *query*; a note whose name is nothing but an id
+    still has that id embedded on the document side, where `note_chunks` heads
+    a chunk unconditionally. So this is not an "ids never leave" guarantee, and
+    the notice does not offer one -- such a note reaches `informative_name` as
+    a bare id and is reported as a passage alone.
+    """
+    if origin is None:
+        sending = "your search phrase"
+    elif ariadne_note_text.embedded_head(origin["name"]):
+        sending = "your selected passage and its note's name without its id"
+    else:
+        sending = "your selected passage"
+    print(
+        f"ariadne-similar: sending {sending} to "
+        f"{ariadne_embed_client.safe_url(args.endpoint)} ({_printable(args.model)})",
+        file=sys.stderr,
+    )
+
+
 def run_search(args, vault, notes, name_index, embedder):
     origin = None
     if args.from_note is not None:
@@ -239,20 +268,7 @@ def run_search(args, vault, notes, name_index, embedder):
 
     cached = load_or_refresh(args, vault, notes, embedder)
     clusters, shape = cluster_notes(notes, name_index)
-    # The egress notice names what is actually leaving the machine, to the field:
-    # under --from that is a passage out of a note rather than a typed phrase,
-    # and the note's own name goes with it whenever it carries words.
-    if origin is None:
-        sending = "your search phrase"
-    elif ariadne_note_text.informative_name(origin["name"]):
-        sending = "your selected passage and its note's name"
-    else:
-        sending = "your selected passage"
-    print(
-        f"ariadne-similar: sending {sending} to "
-        f"{ariadne_embed_client.safe_url(args.endpoint)} ({_printable(args.model)})",
-        file=sys.stderr,
-    )
+    announce_egress(args, origin)
     query_vecs = embedder(ariadne_search.query_texts(
         args.search, lifted=origin is not None,
         name=origin["name"] if origin is not None else None,

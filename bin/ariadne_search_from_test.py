@@ -226,9 +226,9 @@ class FromReportTests(unittest.TestCase):
         _, err = run_search(
             ["--search", "mulch", "--from", "db"], self.FILES, want_stderr=True
         )
-        self.assertIn("sending your selected passage and its note's name to", err)
+        self.assertIn("sending your selected passage and its note's name without its id to", err)
 
-    def test_the_egress_notice_drops_the_name_when_the_name_is_not_sent(self):
+    def test_the_egress_notice_drops_the_name_when_no_name_is_sent(self):
         """A date-titled note contributes no name, so the notice must not claim one."""
         _, err = run_search(
             ["--search", "mulch", "--from", "2026-09-05"],
@@ -236,6 +236,27 @@ class FromReportTests(unittest.TestCase):
         )
         self.assertIn("sending your selected passage to", err)
         self.assertNotIn("note's name", err)
+
+    def test_an_id_in_front_of_a_title_reaches_neither_the_notice_nor_the_server(self):
+        """An id in front of a title is dropped before either end embeds
+        anything, so it must not appear in the egress notice and must not be in
+        any string the embedder is handed.
+
+        Not a claim that an id never leaves: a note named *only* `1a2b` still has
+        that id embedded on the document side, which
+        `test_a_bare_id_is_kept_by_the_document_end...` pins."""
+        calls = []
+        _, err = run_search(
+            ["--search", "mulch", "--from", "1a2 Compost"],
+            {"1a2 Compost.md": GARDENING, "storage.md": STORAGE},
+            calls=calls, want_stderr=True,
+        )
+        self.assertIn("sending your selected passage and its note's name without its id to", err)
+        # The exact query string, not merely "Compost appears somewhere": the
+        # indexing pass embeds the document too, so a laxer assertion passed
+        # even when the query dropped the title entirely.
+        self.assertIn("Compost\n\nmulch", calls)
+        self.assertFalse([text for text in calls if "1a2" in text])
 
     def test_the_egress_notice_still_says_phrase_without_from(self):
         _, err = run_search(["--search", "mulch"], self.FILES, want_stderr=True)
